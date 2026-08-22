@@ -5,6 +5,7 @@ import {
   USDC_MAINNET_ASA_ID,
   USDC_TESTNET_ASA_ID,
 } from '@x402/avm';
+import type { ShieldConfig } from './shield/types.js';
 
 export type AlgorandNetwork = 'testnet' | 'mainnet';
 
@@ -21,6 +22,10 @@ export interface RuntimeConfig {
   demoMode: boolean;
   demoMnemonic?: string;
   defaultWalletAddress: string;
+  treasuryMnemonic?: string;
+  openaiApiKey?: string;
+  openaiModel: string;
+  shield: ShieldConfig;
 }
 
 const NETWORKS = {
@@ -35,6 +40,23 @@ const NETWORKS = {
     indexerUrl: 'https://mainnet-idx.algonode.cloud',
   },
 } as const;
+
+function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const value = Number(env[name] ?? fallback);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function usdToAtomic(value: string): number {
+  const parsed = Number(value.trim().replace(/^\$/, ''));
+  const atomic = Math.round(parsed * 1_000_000);
+  if (!Number.isFinite(parsed) || parsed < 0 || !Number.isSafeInteger(atomic)) {
+    throw new Error('PRICE_USDC must be a non-negative USD amount such as $0.001.');
+  }
+  return atomic;
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const networkName = env.ALGORAND_NETWORK ?? 'testnet';
@@ -66,6 +88,27 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     throw new Error('DEMO_MODE is TestNet-only. Disable it before using MainNet.');
   }
 
+  const apiBaseUrl = (env.API_BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
+  try {
+    const parsed = new URL(apiBaseUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error();
+  } catch {
+    throw new Error('API_BASE_URL must be an absolute HTTP or HTTPS URL.');
+  }
+
+  const price = env.PRICE_USDC ?? '$0.001';
+  const shield: ShieldConfig = {
+    maxJobSpendAtomic: positiveInteger(env, 'SHIELD_MAX_JOB_SPEND', 20_000),
+    maxResourcePaymentAtomic: positiveInteger(env, 'SHIELD_MAX_RESOURCE_PAYMENT', 10_000),
+    maxResources: positiveInteger(env, 'SHIELD_MAX_RESOURCES', 3),
+    requestTimeoutMs: positiveInteger(env, 'SHIELD_REQUEST_TIMEOUT_MS', 8_000),
+    maxResponseBytes: positiveInteger(env, 'SHIELD_MAX_RESPONSE_BYTES', 64_000),
+    quoteExpirySeconds: positiveInteger(env, 'QUOTE_EXPIRY_SECONDS', 120),
+    serviceFeeAtomic: usdToAtomic(price),
+    demoMode,
+    baseUrl: apiBaseUrl,
+  };
+
   return {
     port,
     networkName,
@@ -74,10 +117,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     indexerUrl: (env.INDEXER_URL ?? selected.indexerUrl).replace(/\/$/, ''),
     facilitatorUrl: (env.FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz').replace(/\/$/, ''),
     payTo,
-    price: env.PRICE_USDC ?? '$0.001',
+    price,
     challengeMode: env.CHALLENGE_MODE === 'true',
     demoMode,
     demoMnemonic: demoMode ? env.CLIENT_MNEMONIC?.trim() : undefined,
     defaultWalletAddress,
+    treasuryMnemonic: env.TREASURY_MNEMONIC?.trim() || undefined,
+    openaiApiKey: env.OPENAI_API_KEY?.trim() || undefined,
+    openaiModel: env.OPENAI_MODEL?.trim() || 'gpt-5.6',
+    shield,
   };
 }

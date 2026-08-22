@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { testConfig } from './config.js';
 
-describe('x402 Commerce Template HTTP API', () => {
+describe('CPMM-SHIELD HTTP API', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
@@ -30,10 +30,15 @@ describe('x402 Commerce Template HTTP API', () => {
   it('keeps the health route public', async () => {
     const response = await createApp(testConfig).request('/health');
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ status: 'ok', service: 'x402-commerce-template' });
+    await expect(response.json()).resolves.toMatchObject({
+      status: 'ok',
+      service: 'cpmm-shield',
+      network: testConfig.network,
+      treasuryReady: false,
+    });
   });
 
-  it('serves the demo dashboard and browser assets', async () => {
+  it('serves the CPMM-SHIELD operations dashboard and browser assets', async () => {
     const app = createApp(testConfig);
     const [page, styles, script] = await Promise.all([
       app.request('/'),
@@ -42,7 +47,13 @@ describe('x402 Commerce Template HTTP API', () => {
     ]);
 
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain('Ask agent to buy');
+    const html = await page.text();
+    expect(html).toContain('One payment in. Many protected resources out.');
+    expect(html).toContain('SIMULATED CONTENT');
+    expect(html).toContain('REAL TESTNET PAYMENT');
+    expect(html).toContain('Execution flow');
+    expect(html).toContain('Audit trail');
+    expect(html).toContain('Run shield quote');
     expect(styles.headers.get('content-type')).toContain('text/css');
     expect(script.headers.get('content-type')).toContain('text/javascript');
   });

@@ -8,12 +8,16 @@ import {
 import { wrapFetchWithPayment, x402Client, x402HTTPClient } from '@x402/fetch';
 import type { AlgorandNetwork } from '../config.js';
 
-export function createAvmPayingClient(mnemonic: string, networkName: AlgorandNetwork) {
+export function createAvmPayingClient(
+  mnemonic: string,
+  networkName: AlgorandNetwork,
+  fetchImpl: typeof fetch = fetch,
+) {
   let account: algosdk.Account;
   try {
     account = algosdk.mnemonicToSecretKey(mnemonic);
   } catch {
-    throw new Error('CLIENT_MNEMONIC is invalid. It must be a valid 25-word Algorand mnemonic.');
+    throw new Error('The payment mnemonic is invalid. It must be a valid 25-word Algorand mnemonic.');
   }
 
   const network =
@@ -25,7 +29,7 @@ export function createAvmPayingClient(mnemonic: string, networkName: AlgorandNet
   return {
     signer,
     network,
-    fetchWithPayment: wrapFetchWithPayment(fetch, client),
+    fetchWithPayment: wrapFetchWithPayment(fetchImpl, client),
     httpClient: new x402HTTPClient(client),
   };
 }

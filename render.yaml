@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: cpmm-shield
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ALGORAND_NETWORK
+        value: testnet
+      - key: FACILITATOR_URL
+        value: https://facilitator.goplausible.xyz
+      - key: DEMO_MODE
+        value: "false"
+      - key: API_BASE_URL
+        sync: false
+      - key: PAY_TO_ADDRESS
+        sync: false
+      - key: CLIENT_MNEMONIC
+        sync: false
+      - key: TREASURY_MNEMONIC
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm smoke

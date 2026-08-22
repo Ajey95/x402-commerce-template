@@ -58,7 +58,7 @@ export function createDemoPurchaseHandler(config: RuntimeConfig) {
       return c.json(
         {
           error: 'challenge_failed',
-          message: `Expected HTTP 402 from x402 Commerce Template, received ${challenge.status}.`,
+          message: `Expected HTTP 402 from CPMM-SHIELD, received ${challenge.status}.`,
         },
         502,
       );

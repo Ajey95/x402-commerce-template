@@ -1,24 +1,37 @@
 import 'dotenv/config';
 
-const route = process.env.SIMULATOR_ROUTE ?? '/api/wallet/:address';
-const price = process.env.PRICE_USDC ?? '$0.001';
-const network = process.env.ALGORAND_NETWORK ?? 'testnet';
-const facilitator = process.env.FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz';
-const payTo = process.env.PAY_TO_ADDRESS ?? '<PAY_TO_ADDRESS>';
-
-const steps = [
-  ['1', 'Client requests resource', `GET ${route}`],
-  ['2', 'Server returns challenge', `HTTP 402, price ${price}, network ${network}, payTo ${payTo}`],
-  ['3', 'Client evaluates policy', 'Check budget, network, asset, receiver, and resource metadata'],
-  ['4', 'Client signs payment', 'Use local TestNet mnemonic, wallet integration, or production signer'],
-  ['5', 'Client retries request', 'Same URL plus x402 payment proof header'],
-  ['6', 'Server verifies payment', `POST verify through ${facilitator}`],
-  ['7', 'Resource executes', 'Run paid business logic only after verification'],
-  ['8', 'Facilitator settles', 'Submit USDC transfer on Algorand'],
-  ['9', 'Server returns receipt', 'HTTP 200 plus settlement response header and JSON payload'],
+const resources = [
+  { id: 'weather', price: 2_000, result: 'validated' },
+  { id: 'company-lookup', price: 3_000, result: 'validated' },
+  { id: 'sentiment-score', price: 2_000, result: 'validated' },
 ] as const;
+const declared = resources.map(resource => ({ ...resource, maxPayment: 3_000 }));
+const serviceFee = 1_000;
+const upfront = declared.reduce((sum, resource) => sum + resource.maxPayment, serviceFee);
+const spent = resources.reduce((sum, resource) => sum + resource.price, 0);
+const remaining = upfront - spent - serviceFee;
+const usdc = (atomic: number) => (atomic / 1_000_000).toFixed(6);
 
-for (const [id, title, detail] of steps) {
-  console.log(`${id}. ${title}`);
-  console.log(`   ${detail}`);
+console.log('╔══════════════════════════════════════════════════════╗');
+console.log('║  CPMM-SHIELD SIMULATION — NO REAL FUNDS             ║');
+console.log('╚══════════════════════════════════════════════════════╝');
+console.log(`Client ── HTTP 402 / ${usdc(upfront)} USDC ──▶ Shield`);
+console.log('                       │');
+for (const resource of resources) {
+  console.log(`                       ├─▶ ${resource.id.padEnd(18)} ${usdc(resource.price)}  ✓ ${resource.result}`);
 }
+console.log('                       │');
+console.log(`                       ├─  service fee          ${usdc(serviceFee)}`);
+console.log(`                       └─  remaining budget     ${usdc(remaining)}`);
+console.log('');
+console.log(JSON.stringify({
+  status: 'COMPLETED',
+  summary: { requested: 3, completed: 3, failed: 0, rejections: 0 },
+  payments: {
+    upfront: usdc(upfront),
+    downstream: usdc(spent),
+    serviceFee: usdc(serviceFee),
+    remaining: usdc(remaining),
+  },
+  note: 'SIMULATION — NO REAL FUNDS',
+}, null, 2));

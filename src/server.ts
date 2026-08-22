@@ -8,12 +8,13 @@ try {
   const app = createApp(config);
 
   serve({ fetch: app.fetch, port: config.port }, info => {
-    console.log(`x402 Commerce Template running on http://localhost:${info.port}`);
+    console.log(`CPMM-SHIELD running on http://localhost:${info.port}`);
     console.log('Health endpoint: /health');
-    console.log('Protected endpoint: /api/wallet/:address');
+    console.log('Protected endpoint: POST /api/shield/execute');
+    console.log(`Treasury: ${config.treasuryMnemonic ? 'configured' : 'not configured'}`);
     console.log(`Payment network: Algorand ${config.networkName}`);
   });
 } catch (error) {
-  console.error(`x402 Commerce Template could not start: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`CPMM-SHIELD could not start: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }

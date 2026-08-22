@@ -10,7 +10,7 @@ async function main() {
   const url = resourceUrl();
   const payer = createPayingClient();
 
-  console.log('Requesting x402 Commerce Template...');
+  console.log('Requesting CPMM-SHIELD legacy paid resource...');
   const unpaid = await fetch(url);
   if (unpaid.status !== 402) {
     throw new Error(`Expected the payment challenge, but received HTTP ${unpaid.status}.`);

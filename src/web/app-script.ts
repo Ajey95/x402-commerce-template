@@ -1,94 +1,186 @@
 export const APP_SCRIPT = String.raw`
-const form = document.querySelector('#purchase-form');
-const button = document.querySelector('#purchase-button');
-const input = document.querySelector('#wallet-address');
-const statusText = document.querySelector('#activity-status');
-const message = document.querySelector('#activity-message');
-const result = document.querySelector('#result');
-const stepNames = ['challenge', 'terms', 'agent', 'settlement', 'report'];
+const form = document.querySelector('#shield-form');
+const runButton = document.querySelector('#run-button');
+const jobInput = document.querySelector('#job-id');
+const runnerMessage = document.querySelector('#runner-message');
+const quoteCard = document.querySelector('#quote-card');
+const resultJson = document.querySelector('#result-json');
+const resultStatus = document.querySelector('#result-status');
+const flowState = document.querySelector('#flow-state');
+const demoReady = document.body.dataset.demoReady === 'true';
+let activeJobId = '';
 
-function stepElement(name) {
-  return document.querySelector('[data-step="' + name + '"]');
+function makeJobId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return 'job_' + [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
 }
 
-function resetSteps() {
-  for (const name of stepNames) stepElement(name).className = '';
-  result.hidden = true;
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
 
-function setStep(name, state, text) {
-  stepElement(name).className = state;
-  if (text) message.textContent = text;
-  statusText.textContent = state === 'failed' ? 'Needs attention' : state === 'done' ? 'In progress' : 'Working';
+function atomic(value) {
+  return (Number(value || 0) / 1_000_000).toFixed(6);
 }
 
-function decodePaymentRequired(value) {
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
-  return JSON.parse(atob(padded));
+function setMessage(kind, title, detail) {
+  runnerMessage.className = 'runner-message ' + kind;
+  runnerMessage.querySelector('b').textContent = title;
+  runnerMessage.querySelector('small').textContent = detail;
 }
 
-function formatPrice(requirement) {
-  const decimals = requirement.extra?.decimals ?? 6;
-  return '$' + (Number(requirement.amount) / 10 ** decimals) + ' USDC';
+function setFlow(name, state) {
+  const node = document.querySelector('[data-flow="' + name + '"]');
+  if (node) node.classList.toggle('active', state === 'active');
+  flowState.className = 'state-pill ' + (state === 'failed' ? 'failed' : state === 'done' ? 'complete' : 'working');
+  flowState.textContent = state === 'failed' ? 'FAILED' : state === 'done' ? 'COMPLETED' : 'RUNNING';
 }
 
-function renderResult(data) {
-  document.querySelector('#metric-algo').textContent = data.report.algoBalance.toLocaleString();
-  document.querySelector('#metric-assets').textContent = String(data.report.assetCount);
-  document.querySelector('#metric-usdc').textContent = data.report.usdcBalance.toLocaleString();
-  document.querySelector('#metric-status').textContent = data.report.status;
-  document.querySelector('#report-summary').textContent = data.report.summary;
-  document.querySelector('#transaction-id').textContent = data.payment.transaction;
-  document.querySelector('#explorer-link').href = data.payment.explorer;
-  result.hidden = false;
-  result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+function makeRequest(requestId) {
+  const origin = location.origin;
+  return {
+    requestId,
+    resources: [
+      { id: 'weather', url: origin + '/api/resources/weather', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['temperature', 'condition'] } },
+      { id: 'company-lookup', url: origin + '/api/resources/company-lookup', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['name', 'founded'] } },
+      { id: 'sentiment-score', url: origin + '/api/resources/sentiment-score', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['score', 'label'] } }
+    ]
+  };
+}
+
+function renderQuote(quote) {
+  quoteCard.hidden = false;
+  document.querySelector('#quote-job').textContent = quote.jobId;
+  document.querySelector('#quote-price').textContent = quote.quotedPrice;
+  document.querySelector('#quote-expiry').textContent = new Date(quote.expiresAt).toLocaleTimeString();
+  document.querySelector('#metric-upfront').textContent = atomic(quote.quotedPriceAtomic);
+  resultJson.textContent = JSON.stringify({ status: 'payment_required', quote }, null, 2);
+  resultStatus.textContent = '402 QUOTED';
+  resultStatus.className = 'state-pill working';
+}
+
+function renderReceipt(receipt) {
+  const complete = receipt.summary?.completed || 0;
+  const requested = receipt.summary?.requested || receipt.resources?.length || 0;
+  const passed = (receipt.resources || []).filter(item => item.validation === 'passed').length;
+  document.querySelector('#metric-upfront').textContent = receipt.payments?.upfront || '—';
+  document.querySelector('#metric-downstream').textContent = receipt.payments?.downstream || '—';
+  document.querySelector('#metric-remaining').textContent = receipt.payments?.remaining || '—';
+  document.querySelector('#metric-resources').textContent = complete + '/' + requested;
+  document.querySelector('#metric-validation').textContent = passed + '/' + requested;
+  resultJson.textContent = JSON.stringify(receipt, null, 2);
+  resultStatus.textContent = receipt.status;
+  resultStatus.className = 'state-pill ' + (receipt.status === 'COMPLETED' ? 'complete' : 'failed');
+  for (const item of receipt.resources || []) {
+    const row = document.querySelector('[data-resource="' + item.id + '"]');
+    if (!row) continue;
+    row.className = item.validation === 'passed' ? 'done' : 'failed';
+    row.querySelector('small').textContent = item.validation === 'passed' ? 'Paid · validated' : (item.errorCode || 'Failed');
+  }
+  setFlow('result', receipt.status === 'COMPLETED' ? 'done' : 'failed');
+}
+
+async function loadRegistry() {
+  const container = document.querySelector('#resource-registry');
+  try {
+    const response = await fetch('/api/shield/resources');
+    const data = await response.json();
+    container.innerHTML = data.resources.map(item =>
+      '<div class="registry-item">' +
+        '<span>' + escapeHtml(item.id.charAt(0).toUpperCase()) + '</span>' +
+        '<p><b>' + escapeHtml(item.id) + '</b><small>' + escapeHtml(item.method) + ' ' + escapeHtml(item.path) + '</small></p>' +
+        '<code>' + atomic(item.priceAtomic) + '</code>' +
+      '</div>',
+    ).join('');
+    document.querySelector('#registry-count').textContent = data.resources.length + ' ACTIVE';
+  } catch {
+    container.innerHTML = '<p class="empty-state">Resource registry unavailable.</p>';
+  }
+}
+
+async function loadAudit() {
+  const suffix = activeJobId ? '?jobId=' + encodeURIComponent(activeJobId) : '';
+  const container = document.querySelector('#audit-list');
+  try {
+    const response = await fetch('/api/shield/audit' + suffix);
+    const data = await response.json();
+    if (!data.events.length) {
+      container.innerHTML = '<p class="empty-state">No events yet. Every quote, settlement, validation, and failure appears here.</p>';
+      return;
+    }
+    container.innerHTML = data.events.slice().reverse().map(event => {
+      const paid = event.paymentStatus === 'settled';
+      return '<div class="audit-row">' +
+        '<div><b>' + escapeHtml(event.event) + '</b><small>' + new Date(event.timestamp).toLocaleTimeString() + '</small></div>' +
+        '<code>' + escapeHtml(event.resourceId || event.jobId) + '</code>' +
+        '<b class="' + (paid ? 'paid' : event.errorCode ? 'failed' : '') + '">' + escapeHtml(event.paymentStatus || 'recorded') + '</b>' +
+      '</div>';
+    }).join('');
+  } catch {
+    container.innerHTML = '<p class="empty-state">Audit service unavailable.</p>';
+  }
+}
+
+async function loadJob(jobId) {
+  const response = await fetch('/api/shield/jobs/' + encodeURIComponent(jobId));
+  if (!response.ok) return;
+  const job = await response.json();
+  if (job.signature) renderReceipt(job);
 }
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  resetSteps();
-  button.disabled = true;
-  const address = input.value.trim();
+  runButton.disabled = true;
+  activeJobId = jobInput.value.trim() || makeJobId();
+  jobInput.value = activeJobId;
+  const request = makeRequest(activeJobId);
+  setMessage('working', 'Validating policy and requesting quote…', 'No downstream request has started.');
+  setFlow('client', 'active');
 
   try {
-    setStep('challenge', 'active', 'Requesting the protected paid response…');
-    const challenge = await fetch('/api/wallet/' + encodeURIComponent(address));
-    if (challenge.status !== 402) {
-      const detail = await challenge.json().catch(() => ({}));
-      throw new Error(detail.message || 'Expected HTTP 402, received ' + challenge.status + '.');
-    }
-    setStep('challenge', 'done', 'x402 Commerce Template responded with HTTP 402 Payment Required.');
-
-    setStep('terms', 'active', 'Reading machine-readable payment requirements…');
-    const header = challenge.headers.get('payment-required');
-    if (!header) throw new Error('The 402 response did not include PAYMENT-REQUIRED.');
-    const paymentRequired = decodePaymentRequired(header);
-    const requirement = paymentRequired.accepts?.[0];
-    if (!requirement) throw new Error('No supported payment requirement was advertised.');
-    document.querySelector('#term-price').textContent = formatPrice(requirement);
-    setStep('terms', 'done', 'Terms accepted: ' + formatPrice(requirement) + ' on Algorand TestNet.');
-
-    setStep('agent', 'active', 'The local demo agent is constructing and signing the USDC payment…');
-    const paid = await fetch('/demo/purchase', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ address }),
+    const response = await fetch('/api/shield/execute', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request)
     });
-    const data = await paid.json().catch(() => ({}));
-    if (!paid.ok) throw new Error(data.message || 'The agent purchase failed with HTTP ' + paid.status + '.');
-    setStep('agent', 'done', 'The agent signed the payment without exposing its mnemonic.');
-    setStep('settlement', 'done', 'GoPlausible settled transaction ' + data.payment.transaction.slice(0, 12) + '…');
-    setStep('report', 'done', 'Payment confirmed. Paid resource unlocked.');
-    statusText.textContent = 'Complete';
-    renderResult(data);
+    const data = await response.json().catch(() => ({}));
+    if (response.status !== 402) {
+      if (response.ok && data.signature) {
+        renderReceipt(data);
+        setMessage('success', 'Cached signed receipt returned.', 'Idempotency prevented a duplicate payment.');
+        return;
+      }
+      throw new Error(data.message || 'Expected HTTP 402, received ' + response.status + '.');
+    }
+    renderQuote(data.quote);
+    setFlow('quote', 'active');
+    setMessage('success', 'Policy passed. Bound x402 quote created.', demoReady
+      ? 'The server-side TestNet demo payer is settling this request now.'
+      : 'Configure DEMO_MODE + CLIENT_MNEMONIC or run pnpm client:shield to settle it.');
+
+    if (demoReady) {
+      setFlow('shield', 'active');
+      const paid = await fetch('/demo/shield', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(request)
+      });
+      const receipt = await paid.json().catch(() => ({}));
+      if (!paid.ok) throw new Error(receipt.message || 'Paid demo returned HTTP ' + paid.status + '.');
+      renderReceipt(receipt);
+      setMessage('success', 'Settlement confirmed and receipt signed.', 'All results below passed the configured validation policy.');
+    }
   } catch (error) {
-    const active = document.querySelector('.steps li.active');
-    if (active) active.className = 'failed';
-    statusText.textContent = 'Failed';
-    message.textContent = error instanceof Error ? error.message : String(error);
+    setMessage('error', 'Shield request stopped.', error instanceof Error ? error.message : String(error));
+    setFlow('shield', 'failed');
   } finally {
-    button.disabled = false;
+    runButton.disabled = false;
+    await loadAudit();
   }
 });
+
+document.querySelector('#refresh-audit').addEventListener('click', loadAudit);
+jobInput.value = makeJobId();
+loadRegistry();
+loadAudit();
+const queryJob = new URLSearchParams(location.search).get('job');
+if (queryJob) { activeJobId = queryJob; jobInput.value = queryJob; loadJob(queryJob).then(loadAudit); }
 `;

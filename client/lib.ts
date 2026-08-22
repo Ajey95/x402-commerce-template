@@ -86,7 +86,7 @@ export function explainPaymentError(error: unknown): string {
     return `${message}\nFund the payer with enough ALGO for fees/minimum balance and enough USDC for the request.`;
   }
   if (lower.includes('fetch') || lower.includes('network')) {
-    return `${message}\nCheck that x402 Commerce Template and the GoPlausible facilitator are reachable.`;
+    return `${message}\nCheck that CPMM-SHIELD and the GoPlausible facilitator are reachable.`;
   }
   return message;
 }

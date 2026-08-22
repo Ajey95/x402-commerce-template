@@ -1,67 +1,115 @@
 import 'dotenv/config';
-import { HTTPFacilitatorClient } from '@x402/core/server';
-import { withBazaar, type DiscoveryResource } from '@x402-avm/extensions';
-import {
-  createPayingClient,
-  explainPaymentError,
-  resourceUrl,
-} from './lib.js';
+import { randomUUID } from 'node:crypto';
+import { createPayingClient, explainPaymentError } from './lib.js';
+import { selectAvailableModel } from './openai-model.js';
+import { createDemoShieldRequest, requestShieldJobWithProof } from './shield-client.js';
 
-async function discoverPaidResource(facilitatorUrl: string): Promise<DiscoveryResource | undefined> {
-  // The AVM extension package currently aliases its core dependency; the public client API is compatible.
-  const facilitator = new HTTPFacilitatorClient({ url: facilitatorUrl });
-  const bazaar = withBazaar(
-    facilitator as unknown as Parameters<typeof withBazaar>[0],
-  );
-  const limit = 50;
-  for (let offset = 0; ; offset += limit) {
-    const page = await bazaar.extensions.discovery.listResources({ type: 'http', limit, offset });
-    const match = page.items.find(item => {
-      const searchable = `${item.resource} ${JSON.stringify(item.metadata ?? {})}`.toLowerCase();
-      return searchable.includes('x402-commerce-template') || searchable.includes('paid resource');
-    });
-    if (match || offset + page.items.length >= page.pagination.total) return match;
+interface OpenAIItem {
+  type: string;
+  call_id?: string;
+  name?: string;
+  arguments?: string;
+  content?: Array<{ type: string; text?: string }>;
+}
+
+interface OpenAIResponse {
+  id: string;
+  output: OpenAIItem[];
+  output_text?: string;
+}
+
+async function openai(path: string, apiKey: string, init?: RequestInit): Promise<Record<string, unknown>> {
+  const response = await fetch(`https://api.openai.com/v1${path}`, {
+    ...init,
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', ...init?.headers },
+  });
+  const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const detail = body.error as { message?: string } | undefined;
+    throw new Error(`OpenAI API returned HTTP ${response.status}: ${detail?.message ?? 'unknown error'}`);
   }
+  return body;
+}
+
+async function resolveModel(apiKey: string, requestedModel: string) {
+  const list = await openai('/models', apiKey);
+  return selectAvailableModel(
+    ((list.data as Array<{ id?: string }> | undefined) ?? []).map(item => item.id),
+    requestedModel,
+  );
+}
+
+function responseText(response: OpenAIResponse): string {
+  if (response.output_text) return response.output_text;
+  return response.output.flatMap(item => item.content ?? []).map(part => part.text ?? '').join('\n').trim();
 }
 
 async function main() {
-  const facilitatorUrl = process.env.FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz';
-  const mode = process.env.AGENT_DISCOVERY ?? 'direct';
-  let url: string;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error('OPENAI_API_KEY is required for the tool-calling client.');
+  const requestedModel = process.env.OPENAI_MODEL?.trim() || 'gpt-5.6';
+  const baseUrl = (process.env.API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  const goal = process.argv.slice(2).join(' ') ||
+    'Get Bangalore weather, look up Algorand Foundation, and score the sentiment of “Secure, scalable and fast.”';
+  const selection = await resolveModel(apiKey, requestedModel);
+  const model = selection.model;
+  console.log(
+    selection.usedFallback
+      ? `OpenAI model ${requestedModel} is unavailable to this project; using ${model}.`
+      : `OpenAI model confirmed: ${model}`,
+  );
 
-  if (mode === 'bazaar') {
-    console.log('Agent: searching the GoPlausible Bazaar for Algorand paid resource...');
-    const discovered = await discoverPaidResource(facilitatorUrl);
-    if (!discovered) {
-      throw new Error(
-        'x402 Commerce Template is not currently indexed in Bazaar. A public endpoint and a successful settlement are required before discovery can be claimed.',
-      );
-    }
-    url = discovered.resource;
-    console.log(`Agent: discovered ${url}`);
-    console.log(`Agent: ${discovered.accepts.length} payment option(s) advertised.`);
-  } else if (mode === 'direct') {
-    url = resourceUrl();
-    console.log('Agent mode: known resource URL (Bazaar discovery is not being claimed).');
-    console.log(`Agent: selected ${url}`);
-  } else {
-    throw new Error('AGENT_DISCOVERY must be either "direct" or "bazaar".');
-  }
+  const tools = [{
+    type: 'function',
+    name: 'requestShieldJob',
+    description: 'Submit and pay one CPMM-SHIELD job that aggregates weather, company lookup, and sentiment resources into a signed receipt.',
+    strict: true,
+    parameters: {
+      type: 'object',
+      properties: { description: { type: 'string', description: 'The natural-language research goal to execute.' } },
+      required: ['description'],
+      additionalProperties: false,
+    },
+  }];
+  const first = (await openai('/responses', apiKey, {
+    method: 'POST',
+    body: JSON.stringify({
+      model,
+      instructions: 'You are a commerce agent. Use requestShieldJob exactly once to satisfy the user, then summarize only the validated receipt.',
+      input: goal,
+      tools,
+      tool_choice: 'auto',
+    }),
+  })) as unknown as OpenAIResponse;
+  const call = first.output.find(item => item.type === 'function_call' && item.name === 'requestShieldJob');
+  if (!call?.call_id) throw new Error('The model did not call requestShieldJob.');
+  const args = JSON.parse(call.arguments ?? '{}') as { description?: string };
+  console.log(`Agent tool call: ${args.description ?? goal}`);
 
   const payer = createPayingClient();
-  console.log('Agent: purchasing the resource with x402...');
-  const response = await payer.fetchWithPayment(url);
-  if (!response.ok) throw new Error(`Purchase failed with HTTP ${response.status}: ${await response.text()}`);
-
-  const settlement = payer.httpClient.getPaymentSettleResponse(name => response.headers.get(name));
-  if (!settlement.success) throw new Error('The response arrived without a confirmed settlement receipt.');
-
-  console.log(`Agent: settlement confirmed in transaction ${settlement.transaction}`);
-  console.log('Agent: consuming paid resource...');
-  console.log(JSON.stringify(await response.json(), null, 2));
+  const request = createDemoShieldRequest(baseUrl, `job_${randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const proof = await requestShieldJobWithProof(baseUrl, request, {
+    fetchWithPayment: payer.fetchWithPayment,
+    readSettlement: response => payer.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
+  });
+  const final = (await openai('/responses', apiKey, {
+    method: 'POST',
+    body: JSON.stringify({
+      model,
+      previous_response_id: first.id,
+      tools,
+      input: [{
+        type: 'function_call_output',
+        call_id: call.call_id,
+        output: JSON.stringify({ description: args.description, transaction: proof.transaction, receipt: proof.receipt }),
+      }],
+    }),
+  })) as unknown as OpenAIResponse;
+  console.log('\nAgent result');
+  console.log(responseText(final) || JSON.stringify(proof.receipt, null, 2));
 }
 
 main().catch(error => {
-  console.error(`\nAgent demo failed: ${explainPaymentError(error)}`);
-  process.exit(1);
+  console.error(`\nShield agent failed: ${explainPaymentError(error)}`);
+  process.exitCode = 1;
 });

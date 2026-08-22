@@ -1,9 +1,9 @@
 {
-  "name": "x402-commerce-template",
+  "name": "cpmm-shield",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Agentic commerce starter template for x402 payments on Algorand",
+  "description": "Settlement-first x402 payment orchestrator for validated Algorand resources",
   "engines": {
     "node": ">=20"
   },
@@ -16,6 +16,8 @@
     "client:unpaid": "tsx client/unpaid-client.ts",
     "client:paid": "tsx client/paid-client.ts",
     "client:agent": "tsx client/agent-client.ts",
+    "client:shield": "tsx client/agent-client.ts",
+    "demo:scripted": "tsx client/scripted-shield-client.ts",
     "x402": "tsx scripts/x402-cli.ts",
     "sandbox": "tsx scripts/agent-sandbox.ts",
     "simulate": "tsx scripts/payment-flow-simulator.ts"
@@ -29,7 +31,8 @@
     "@x402/hono": "2.19.0",
     "algosdk": "3.6.0",
     "dotenv": "17.2.1",
-    "hono": "4.13.2"
+    "hono": "4.13.2",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "24.3.0",
