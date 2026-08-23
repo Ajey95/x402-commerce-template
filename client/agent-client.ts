@@ -1,8 +1,9 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { createPayingClient, explainPaymentError } from './lib.js';
+import { clientNetwork, createPayingClient, explainPaymentError } from './lib.js';
 import { selectAvailableModel } from './openai-model.js';
 import { requestShieldJobWithProof } from './shield-client.js';
+import { createDefaultAgentGoal, createShieldTool, createShieldToolInstructions } from './shield-tool.js';
 import type { ExecuteShieldRequest } from '../src/shield/types.js';
 
 interface OpenAIItem {
@@ -20,8 +21,8 @@ interface OpenAIResponse {
 }
 
 interface AgentResource {
-  id: 'weather' | 'company-lookup' | 'sentiment-score';
-  input: { city?: string; name?: string; text?: string };
+  id: 'weather' | 'company-lookup' | 'sentiment-score' | 'external-algo-price' | 'external-hash';
+  input: { city?: string; name?: string; text?: string; algo?: string };
   maxPayment: number;
   required: boolean;
 }
@@ -69,8 +70,8 @@ async function main() {
   if (!apiKey) throw new Error('OPENAI_API_KEY is required for the tool-calling client.');
   const requestedModel = process.env.OPENAI_MODEL?.trim() || 'gpt-5.6';
   const baseUrl = (process.env.API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-  const goal = process.argv.slice(2).join(' ') ||
-    'Get Bangalore weather, look up Algorand Foundation, and score the sentiment of “Secure, scalable and fast.”';
+  const network = clientNetwork();
+  const goal = process.argv.slice(2).join(' ') || createDefaultAgentGoal(network.name);
   const selection = await resolveModel(apiKey, requestedModel);
   const model = selection.model;
   console.log(
@@ -79,53 +80,13 @@ async function main() {
       : `OpenAI model confirmed: ${model}`,
   );
 
-  const tools = [{
-    type: 'function',
-    name: 'requestShieldJob',
-    description:
-      'Buy one bounded CPMM-SHIELD job using only trusted resources. Never invent provider URLs, recipients, schemas, networks, or assets.',
-    // Provider-specific inputs intentionally use a non-strict function schema; the shield's exact
-    // server-side schemas are the security boundary and reject wrong/extra input before payment.
-    strict: false,
-    parameters: {
-      type: 'object',
-      properties: {
-        resources: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 3,
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', enum: ['weather', 'company-lookup', 'sentiment-score'] },
-              input: {
-                type: 'object',
-                properties: {
-                  city: { type: 'string' },
-                  name: { type: 'string' },
-                  text: { type: 'string' },
-                },
-                additionalProperties: false,
-              },
-              maxPayment: { type: 'integer', minimum: 0, maximum: 10000 },
-              required: { type: 'boolean' },
-            },
-            required: ['id', 'input', 'maxPayment', 'required'],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ['resources'],
-      additionalProperties: false,
-    },
-  }];
+  const tools = [createShieldTool(network.name)];
 
   const first = (await openai('/responses', apiKey, {
     method: 'POST',
     body: JSON.stringify({
       model,
-      instructions:
-        'You are a commerce agent using CPMM-SHIELD as a payment firewall. Use requestShieldJob at most once. Choose only listed trusted resource IDs. Weather input is {city}; company-lookup input is {name}; sentiment-score input is {text}. Never invent URLs, payment recipients, schemas, networks, assets, or wallet credentials. After the tool result, summarize only validated results from the signed receipt.',
+      instructions: createShieldToolInstructions(network.name),
       input: goal,
       tools,
       tool_choice: 'auto',

@@ -53,15 +53,36 @@ describe('CPMM-SHIELD HTTP API', () => {
     expect(html).toContain('One payment in.');
     expect(html).toContain('Many protected resources out.');
     expect(html).toContain('SIMULATED CONTENT');
+    expect(html).toContain('PROVIDER CONTENT');
     expect(html).toContain('REAL TESTNET PAYMENT');
-    expect(html).toContain('Upstream payment');
+    expect(html).toContain('data-network="testnet"');
+    expect(html).toContain('External ALGO Price Feed');
+    expect(html).not.toContain('External Deterministic Hash');
+    expect(html).toContain('fetch the signed external ALGO/USD price');
+    expect(html).toContain('ORCHESTRATOR ENTRY');
+    expect(html).toMatch(/Upstream payment/i);
     expect(html).toContain('Trusted providers');
-    expect(html).toContain('Response firewall');
+    expect(html).toMatch(/Response firewall/i);
     expect(html).toContain('Signed receipt');
     expect(html).toContain('Run shield quote');
     expect(styles.headers.get('content-type')).toContain('text/css');
     expect(script.headers.get('content-type')).toContain('text/javascript');
-    expect(await script.text()).toContain("input: { city: 'Bangalore' }");
+    const browserScript = await script.text();
+    expect(browserScript).toContain("input: { city: 'Bangalore' }");
+    expect(browserScript).toContain("maxPayment: 2000");
+    expect(browserScript).toContain("id: 'external-algo-price'");
+    expect(browserScript).toContain("id: 'external-hash'");
+  });
+
+  it('renders the MainNet external provider without claiming settlement', async () => {
+    const html = await createApp({ ...testConfig, networkName: 'mainnet' }).request('/').then(response => response.text());
+
+    expect(html).toContain('data-network="mainnet"');
+    expect(html).toContain('External Deterministic Hash');
+    expect(html).not.toContain('External ALGO Price Feed');
+    expect(html).toContain('hash CPMM-SHIELD with sha256');
+    expect(html).toContain('SETTLEMENT NOT CLAIMED');
+    expect(html).not.toContain('REAL MAINNET PAYMENT');
   });
 
   it('keeps the server-side purchase agent disabled by default', async () => {

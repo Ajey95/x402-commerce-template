@@ -1,154 +1,99 @@
-# x402 Commerce Template Demo Guide
+# CPMM-SHIELD Orchestrator Demo Guide
 
-Prepare `.env`, two funded/opted-in TestNet wallets, and dependencies before the demo. Set `DEMO_MODE=true` and keep one terminal running `pnpm dev`. Open `http://localhost:3000` for the visual walkthrough. The suggested timings are optional and can be adapted to your presentation.
+The primary demonstration is `POST /api/shield/execute`, not the legacy wallet lookup. The flow should make two payment boundaries visible: the client's upstream payment to CPMM-SHIELD and the isolated treasury's downstream payments to trusted providers.
 
-## 00–05 — Why x402?
+## 1. Structural no-funds verification
 
-**Presenter note:** HTTP already has a status code for payment, but historically lacked a native payment proof. x402 standardizes the challenge and paid retry.
-
-**Run:**
-
-```bash
-curl http://localhost:3000/health
-```
-
-**Observe:** Ordinary JSON and HTTP `200`.
-
-**Key point:** x402 is per-resource HTTP payment, not login or subscription.
-
-**Common failure:** Server is not running or `.env` lacks `PAY_TO_ADDRESS`.
-
-## 05–10 — Architecture
-
-**Presenter note:** The client, resource server, facilitator, and blockchain have distinct jobs. The Indexer data path is separate from payment settlement.
-
-**Run:** Open [ARCHITECTURE.md](ARCHITECTURE.md).
-
-**Observe:** The two branches from x402 Commerce Template.
-
-**Key point:** The merchant server holds no receiving-wallet private key.
-
-**Common failure:** Treating the Indexer as the facilitator.
-
-## 10–18 — Normal x402 Commerce Template API
-
-**Presenter note:** The default paid route's business logic is deterministic public-data mapping. Participants can replace it after the x402 lifecycle is verified.
-
-**Run:**
-
-```bash
-pnpm test -- test/algorand.test.ts
-curl -i http://localhost:3000/api/wallet/not-an-address
-```
-
-**Observe:** The default mapping test passes; invalid input returns `400` before payment.
-
-**Key point:** Validate requests before charging.
-
-**Common failure:** Using a syntactically invalid or wrong-network resource input.
-
-## 18–30 — Add x402 Middleware
-
-**Presenter note:** Walk through `src/x402/config.ts`: scheme, price, network, asset, `payTo`, facilitator, description, and extensions.
-
-**Run:**
+Run:
 
 ```bash
 pnpm build
+pnpm test
+pnpm smoke
+pnpm simulate
 ```
 
-**Observe:** Typed configuration compiles.
+Expected evidence:
 
-**Key point:** The route handler contains no payment code; middleware owns the protocol.
+- the build and tests pass;
+- smoke says `NO FUNDS MOVED`;
+- the active registry contains four resources: three owned plus one network-selected external provider;
+- the deterministic request contains exactly weather, company lookup, and the active external provider;
+- the TestNet quote is 0.007000 USDC;
+- malformed input is rejected before 402;
+- replay reservation is enforced.
 
-**Common failure:** Upgrading SDK packages independently and breaking facilitator/network compatibility.
+This proves structure and policy only. It is not blockchain settlement evidence.
 
-## 30–37 — Demonstrate HTTP 402
+## 2. Browser walkthrough
 
-**Presenter note:** This client intentionally has no signer.
-
-**Run:**
+Start the service and open `http://localhost:3000`:
 
 ```bash
-pnpm client:unpaid
+pnpm dev
 ```
 
-**Observe:** `402`, `$0.001`, Algorand TestNet network reference, and asset `10458941`.
+Show these dashboard elements:
 
-**Key point:** Payment terms are machine-readable.
+1. runtime network and treasury readiness;
+2. the four-item trusted registry;
+3. the three-item deterministic flow;
+4. owned results labeled `SIMULATED CONTENT`;
+5. the independently hosted result labeled `PROVIDER CONTENT`;
+6. policy running before the HTTP 402 quote;
+7. upstream settlement, downstream execution, response firewall, and signed receipt stages.
 
-**Common failure:** `WALLET_ADDRESS` or `PAY_TO_ADDRESS` is missing/invalid.
+With `DEMO_MODE=false`, the browser is quote-only. `DEMO_MODE=true` is TestNet-only and requires disposable client and treasury credentials.
 
-## 37–47 — Make a Paid Request
+## 3. Network-selected external provider
 
-**Presenter note:** The official fetch wrapper challenges, constructs, signs, retries, verifies, and settles.
+| Runtime | Three-item flow |
+| --- | --- |
+| TestNet | weather + company lookup + `external-algo-price` with exact `{}` input |
+| MainNet | weather + company lookup + `external-hash` with `{ text: "CPMM-SHIELD", algo: "sha256" }` |
 
-**Run:**
+The browser, scripted client, smoke client, bounded OpenAI tool, and server registry select from the same runtime network. A wrong-network external ID must fail before any payment challenge.
+
+## 4. Live TestNet orchestrator acceptance
+
+Only with deliberately funded disposable TestNet client and treasury accounts, a running configured service, and explicit authorization to spend, run:
 
 ```bash
-pnpm client:paid
+LIVE_X402=true pnpm smoke
 ```
 
-Or select **Ask agent to buy** in the browser to show the same lifecycle as a visible five-step timeline.
+PowerShell:
 
-**Observe:** Payer address, confirmed settlement receipt, transaction ID, and paid JSON.
+```powershell
+$env:LIVE_X402='true'; pnpm smoke
+```
 
-**Key point:** Success is printed only after `PAYMENT-RESPONSE.success` is true.
-
-**Common failure:** Payer or receiver not opted into USDC; payer lacks ALGO/USDC.
-
-## 47–52 — Verify Algorand Settlement
-
-**Presenter note:** Protocol output should be independently inspectable on-chain.
-
-**Run:** Open the printed Pera TestNet Explorer URL.
-
-**Observe:** Confirmed transaction and correct asset transfer to `payTo`.
-
-**Key point:** Verification says a payment is valid; settlement says it happened.
-
-**Common failure:** Opening MainNet explorer for a TestNet transaction.
-
-## 52–56 — Bazaar Discovery
-
-**Presenter note:** x402 pays; Bazaar discovers. Metadata is transported in the payment exchange and indexed from settlement traffic.
-
-**Run:**
+The scripted client exercises the same shield endpoint:
 
 ```bash
-AGENT_DISCOVERY=bazaar pnpm client:agent
+pnpm demo:scripted
 ```
 
-**Observe:** A real match is purchased, or the client truthfully says x402 Commerce Template is not indexed.
+Require evidence for:
 
-**Key point:** A local metadata declaration is not a live catalog entry.
+- the upstream shield payment settlement transaction;
+- downstream settlement receipts for weather, company lookup, and `external-algo-price`;
+- validated downstream JSON;
+- a valid aggregate receipt signature;
+- replay rejection against another job.
 
-**Common failure:** Expecting `localhost` to be a reliably callable public agent resource.
+Do not describe a structural smoke, simulation, HTTP 200, or unpaid 402 as live settlement.
 
-## 56–59 — Leaderboard / Challenge
+## 5. MainNet evidence
 
-**Presenter note:** TestNet validates mechanics; the current Challenge requires MainNet, public HTTPS, real GoPlausible settlement, discovery, tag, and tracked usage.
+MainNet is not a demo-payer mode. Before using it, configure secure buyer and treasury signer custody, deliberately funded/USDC-opted-in MainNet accounts, the intended receiver, public HTTPS, and `DEMO_MODE=false`.
 
-**Run:** Open [CHALLENGE_DEPLOYMENT.md](CHALLENGE_DEPLOYMENT.md).
+Use `pnpm demo:scripted` or `LIVE_X402=true pnpm smoke` against the configured public shield service. Require successful upstream and downstream settlement receipts plus independent on-chain confirmation before making any MainNet success claim.
 
-**Observe:** The stepwise readiness checklist.
+## 6. Discovery
 
-**Key point:** Local success is necessary but not leaderboard eligibility.
+Bazaar can describe and index `POST /api/shield/execute` after qualifying settled traffic. Discovery is not authorization: only code-curated provider definitions may receive treasury funds. Confirm catalog presence separately and never infer it from local metadata.
 
-**Common failure:** Turning on the tag while still using TestNet and assuming that counts.
+## 7. Legacy wallet route
 
-## 59–60 — Agentic Commerce Takeaway
-
-**Presenter note:** An API became a paid API, then a discoverable economic service that an agent can purchase without an account.
-
-**Run:**
-
-```bash
-AGENT_DISCOVERY=direct pnpm client:agent
-```
-
-**Observe:** The client labels known-resource mode and performs the same verified purchase lifecycle.
-
-**Key point:** Autonomy comes from discovery + policy + payment + machine-readable output.
-
-**Common failure:** Calling a hardcoded URL “discovery.” This client explicitly does not.
+`GET /api/wallet/:address`, `pnpm client:unpaid`, and `pnpm client:paid` remain starter-template compatibility examples for one paid wallet-data response. They do not exercise multi-resource orchestration, downstream treasury settlement, the external provider, response aggregation, or the signed shield receipt. Do not use them as Orchestrator acceptance evidence.

@@ -35,7 +35,12 @@ function checklist() {
     ['facilitator config', /^https?:\/\//.test(process.env.FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz'), 'HTTP(S) facilitator URL'],
     ['receiver config', validAddress('PAY_TO_ADDRESS'), 'valid public PAY_TO_ADDRESS required at deploy'],
     ['treasury config', set('TREASURY_MNEMONIC'), 'disposable TestNet treasury mnemonic required for live orchestration'],
-    ['resource registry', hasSource('src/shield/registry.ts', /sentiment-score/), 'weather, company, sentiment'],
+    [
+      'resource registry',
+      hasSource('src/shield/trusted-providers.ts', /external-algo-price/) &&
+        hasSource('src/shield/trusted-providers.ts', /external-hash/),
+      'three owned plus one network-selected external provider',
+    ],
     ['spending policy', hasSource('src/shield/policy.ts', /job_over_budget/), 'per-resource and total budget limits'],
     ['replay protection', hasSource('src/shield/payment-manager.ts', /payment_replay/), 'proof reservation and path/job quote binding'],
     ['response validation', hasSource('src/shield/validator.ts', /prompt_injection_marker/), 'exact schema and marker rejection'],
