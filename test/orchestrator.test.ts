@@ -3,10 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AuditLog } from '../src/shield/audit.js';
 import { InMemoryJobStore } from '../src/shield/jobs.js';
 import { ShieldOrchestrator } from '../src/shield/orchestrator.js';
-import {
-  createReceiptSigner,
-  verifyReceipt,
-} from '../src/shield/receipt.js';
+import { createReceiptSigner, verifyReceipt } from '../src/shield/receipt.js';
 import { createResourceRegistry } from '../src/shield/registry.js';
 import {
   ResourceCallError,
@@ -18,15 +15,13 @@ import type { ExecuteShieldRequest, ResourceDefinition, RequestedResource } from
 const baseUrl = 'https://shield.example';
 const registry = createResourceRegistry(baseUrl);
 
-function requested(id: string, maxPayment: number): RequestedResource {
-  const definition = registry.get(id)!;
-  return {
-    id,
-    url: `${baseUrl}${definition.path}`,
-    maxPayment,
-    required: true,
-    expectedSchema: definition.schema,
+function requested(id: string, maxPayment: number, required = true): RequestedResource {
+  const inputs: Record<string, Record<string, unknown>> = {
+    weather: { city: 'Bangalore' },
+    'company-lookup': { name: 'Algorand Foundation' },
+    'sentiment-score': { text: 'Secure, scalable and fast.' },
   };
+  return { id, input: inputs[id] ?? {}, maxPayment, required };
 }
 
 function addSettledJob(store: InMemoryJobStore, request: ExecuteShieldRequest, jobId = 'job-a') {
@@ -126,6 +121,22 @@ describe('shield orchestrator', () => {
     expect(verifyReceipt(receipt)).toBe(true);
   });
 
+  it('uses the trusted registry response schema rather than client declarations', async () => {
+    const store = new InMemoryJobStore();
+    addSettledJob(store, { requestId: 'request-schema', resources: [requested('weather', 3_000)] });
+    const invalid = { ...weatherResult, data: { temperature: 28, condition: 'Clear' } };
+    const receipt = await orchestrator(
+      store,
+      new DeterministicResourceClient({ weather: invalid }),
+    ).execute('job-a');
+    expect(receipt.status).toBe('FAILED');
+    expect(receipt.resources[0]).toMatchObject({
+      paymentStatus: 'settled',
+      validation: 'rejected',
+      errorCode: 'missing_field',
+    });
+  });
+
   it('records a paid validation rejection as a visible partial failure', async () => {
     const store = new InMemoryJobStore();
     addSettledJob(store, {
@@ -151,7 +162,7 @@ describe('shield orchestrator', () => {
     });
   });
 
-  it('surfaces facilitator and timeout failures without hiding successful resources', async () => {
+  it('surfaces downstream failures without hiding successful resources', async () => {
     const store = new InMemoryJobStore();
     addSettledJob(store, {
       requestId: 'request-failure',
@@ -173,6 +184,23 @@ describe('shield orchestrator', () => {
       validation: 'not_run',
       errorCode: 'downstream_timeout',
     });
+  });
+
+  it('keeps optional failures visible without discarding valid results', async () => {
+    const store = new InMemoryJobStore();
+    addSettledJob(store, {
+      requestId: 'request-optional',
+      resources: [requested('weather', 3_000), requested('sentiment-score', 3_000, false)],
+    });
+    const failure = new ResourceCallError('downstream_unavailable', 'Unavailable.', {
+      paymentStatus: 'failed', durationMs: 10,
+    });
+    const receipt = await orchestrator(
+      store,
+      new DeterministicResourceClient({ weather: weatherResult, 'sentiment-score': failure }),
+    ).execute('job-a');
+    expect(receipt.status).toBe('PARTIAL_FAILURE');
+    expect(receipt.results).toHaveProperty('weather');
   });
 
   it('returns the cached receipt without executing resources twice', async () => {
