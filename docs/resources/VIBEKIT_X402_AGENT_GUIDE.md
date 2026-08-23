@@ -15,13 +15,30 @@ vibekit init
 vibekit status
 ```
 
-The canonical Algorand Agent Skills collection contains `algorand-x402-typescript` guidance. Use that guidance before making x402 client/server, AVM scheme, facilitator, or discovery changes.
+The canonical Algorand Agent Skills collection contains the `algorand-x402-typescript` skill. VibeKit can install/configure these skills for the selected coding agent.
 
-If an agent-skill installer is used instead of VibeKit's interactive setup, use the canonical source from `algorand-devrel/algorand-agent-skills` rather than an unofficial copy.
+The Algorand DevRel repository also supports the standard agent-skills CLI. From the project root, the canonical interactive install is:
+
+```bash
+npx skills add algorand-devrel/algorand-agent-skills/skills
+```
+
+Select `algorand-x402-typescript` for this project, plus any other Algorand skills needed by the task. Update installed skills later with:
+
+```bash
+npx skills update
+```
+
+Canonical source:
+
+- `https://github.com/algorand-devrel/algorand-agent-skills`
+- `skills/algorand-x402-typescript/SKILL.md` in that repository
+
+Use that canonical guidance before making x402 client/server, AVM scheme, facilitator, payment-policy, or Bazaar-discovery changes. Do not substitute an unofficial skill copy.
 
 ## Repository merge rule
 
-Do not let setup tools overwrite project guidance.
+Do not let VibeKit, the skills CLI, or any setup tool overwrite project guidance.
 
 The effective instruction order is:
 
@@ -30,12 +47,12 @@ canonical Algorand/x402 skill knowledge
             +
 repository AGENTS.md
             +
-CPMM-SHIELD design/spec
+CPMM-SHIELD local skill + approved design/spec
             =
 actual coding behavior
 ```
 
-When generic agent guidance conflicts with `AGENTS.md`, the CPMM-SHIELD project-specific security invariants win.
+When generic agent guidance conflicts with `AGENTS.md` or `skills/cpmm-shield-x402/SKILL.md`, the CPMM-SHIELD project-specific security invariants win.
 
 ## What the coding agent must understand
 
@@ -49,9 +66,10 @@ The upstream payment does not authorize arbitrary downstream spending. After ups
 
 1. the shield resolves requested resource IDs through its trusted registry;
 2. a separate treasury payer calls those x402 resources;
-3. every downstream settlement receipt is required;
-4. every response passes the response firewall;
-5. only validated results are returned in the signed receipt.
+3. every downstream payment requirement is filtered against trusted network, asset, price, and recipient policy before signing;
+4. every downstream settlement receipt is required;
+5. every response passes the response firewall;
+6. only validated results are returned in the signed receipt.
 
 ### Trust boundary
 
@@ -64,7 +82,7 @@ An AI model may choose from trusted resource IDs and fill bounded inputs. It mus
 - treasury credentials;
 - policy limits.
 
-Bazaar discovery provides candidates, not authorization to spend.
+For an `external-curated` provider, the registry must pin a valid Algorand `payTo` address. Bazaar discovery provides candidates, not authorization to spend.
 
 ## Secret-handling rules
 
@@ -84,10 +102,11 @@ Before accepting an agent-generated x402 change, verify:
 2. official payment requirements still use the intended scheme/network/asset/payTo;
 3. settlement still happens before protected logic;
 4. downstream provider URLs come from the trusted registry;
-5. downstream paid responses still require settlement receipts;
-6. response validation still uses the server-owned schema;
-7. Bazaar metadata matches the real public request contract;
-8. no secret material was introduced.
+5. curated external providers pin a valid recipient and treasury pre-sign policy enforces it;
+6. downstream paid responses still require settlement receipts;
+7. response validation still uses the server-owned schema;
+8. Bazaar metadata matches the real public request contract;
+9. no secret material was introduced.
 
 Then run:
 
