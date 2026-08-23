@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDownstreamPaymentPolicy } from '../src/shield/treasury.js';
 import { createResourceRegistry } from '../src/shield/registry.js';
+import { getTrustedExternalProviders } from '../src/shield/trusted-providers.js';
 
 const payTo = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ';
 const config = {
@@ -64,5 +65,17 @@ describe('downstream pre-sign payment policy', () => {
     };
     const policy = createDownstreamPaymentPolicy(config, externalWithoutPayTo);
     expect(policy(2, [requirement()])).toEqual([]);
+  });
+
+  it('pins runtime network, USDC ASA, exact price, and curated provider recipient together', () => {
+    const provider = getTrustedExternalProviders('testnet')[0]!;
+    const policy = createDownstreamPaymentPolicy(config, provider);
+    const trusted = requirement({ amount: '1000', payTo: provider.payTo });
+
+    expect(policy(2, [trusted])).toHaveLength(1);
+    expect(policy(2, [requirement({ ...trusted, network: 'algorand:other' })])).toEqual([]);
+    expect(policy(2, [requirement({ ...trusted, asset: '31566704' })])).toEqual([]);
+    expect(policy(2, [requirement({ ...trusted, amount: '1001' })])).toEqual([]);
+    expect(policy(2, [requirement({ ...trusted, payTo })])).toEqual([]);
   });
 });

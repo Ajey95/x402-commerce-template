@@ -8,6 +8,8 @@ An autonomous agent that buys several paid APIs normally exposes its wallet to e
 
 CPMM-SHIELD is a settlement-first x402 payment firewall and orchestrator. A client pays the shield once. Only after the upstream Algorand settlement is confirmed does the shield use a separate treasury wallet to pay server-trusted downstream x402 resources, validate each settled response, aggregate only usable results, and sign one auditable receipt.
 
+For the x402 Global Challenge, CPMM-SHIELD is classified as an **Orchestrator entry**: one paid shield request coordinates multiple independently protected downstream resources.
+
 **One payment in. Many protected resources out.**
 
 The primary paid route is **POST /api/shield/execute**.
@@ -38,15 +40,15 @@ The client and AI model do **not** control provider URLs, response schemas, netw
 
 ## Showcase flow
 
-The deterministic judge flow uses three independently x402-protected owned demo endpoints:
+The deterministic judge flow keeps exactly three requests:
 
-- weather;
-- company lookup;
-- sentiment scoring.
+- owned weather content;
+- owned company lookup content;
+- one independently hosted external provider chosen by `ALGORAND_NETWORK`.
 
-Their content is simulated so the demonstration is deterministic. Their x402 middleware and live TestNet payment path use the same official AVM/facilitator integration as the shield.
+On TestNet, the external request is `GET https://recourse-api-production.up.railway.app/feed/compliant` (`external-algo-price`) with exact empty input and a pinned 1000-atomic price/recipient. On MainNet, it is `POST https://agent402.tools/api/hash` (`external-hash`) with exact `{ text, algo }` input and a pinned 1000-atomic price/recipient. The inactive network's ID is not registered.
 
-The architecture can also represent explicitly curated external x402 resources through the trusted `ResourceDefinition` registry without letting users submit arbitrary provider URLs.
+Owned payloads are deterministic simulated content. External responses are provider content and are never labeled simulated. All downstream calls retain settlement receipt, response firewall, network, asset, amount, and recipient enforcement.
 
 ## Why Algorand and x402
 
@@ -62,9 +64,11 @@ This keeps the critical runtime settlement path small and auditable while still 
 
 ## Honest demo boundary
 
-The three owned resource payloads are deterministic simulated content. Their x402 challenges and configured live TestNet payment path can be real. Unit/integration tests use deterministic boundary doubles and never claim blockchain settlement. The default smoke explicitly says no funds moved.
+The owned resource payloads are deterministic simulated content. Their configured live TestNet payment path can be real, while the selected external result is independently hosted provider content. Unit/integration tests use deterministic boundary doubles and never claim blockchain settlement. The default smoke explicitly says no funds moved.
 
 Only a successful live smoke run with funded disposable TestNet client/treasury accounts constitutes live TestNet acceptance evidence.
+
+MainNet use remains gated on production-safe signer custody, intentionally funded accounts, correct network/USDC configuration, and independently observed real settlement evidence. The presence of the MainNet provider definition or an unpaid 402 is not a MainNet success claim.
 
 ## Production posture
 

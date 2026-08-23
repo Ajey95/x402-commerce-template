@@ -8,6 +8,7 @@ const resultJson = document.querySelector('#result-json');
 const resultStatus = document.querySelector('#result-status');
 const flowState = document.querySelector('#flow-state');
 const demoReady = document.body.dataset.demoReady === 'true';
+const activeNetwork = document.body.dataset.network === 'mainnet' ? 'mainnet' : 'testnet';
 let activeJobId = '';
 
 function makeJobId() {
@@ -39,12 +40,15 @@ function setFlow(name, state) {
 }
 
 function makeRequest(requestId) {
+  const external = activeNetwork === 'mainnet'
+    ? { id: 'external-hash', input: { text: 'CPMM-SHIELD', algo: 'sha256' }, maxPayment: 1000, required: true }
+    : { id: 'external-algo-price', input: {}, maxPayment: 1000, required: true };
   return {
     requestId,
     resources: [
-      { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3000, required: true },
+      { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 2000, required: true },
       { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3000, required: true },
-      { id: 'sentiment-score', input: { text: 'Algorand enables secure, scalable agentic payments.' }, maxPayment: 3000, required: true }
+      external
     ]
   };
 }

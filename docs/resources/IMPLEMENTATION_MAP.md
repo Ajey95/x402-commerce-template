@@ -2,6 +2,8 @@
 
 Use this map when asking where a behavior lives or when a coding agent needs to change the project safely.
 
+CPMM-SHIELD is an x402 Global Challenge **Orchestrator entry**: one paid shield request coordinates multiple trusted downstream x402 resources and returns one validated signed receipt.
+
 ## Agent knowledge
 
 | Need | Files |
@@ -20,7 +22,8 @@ Use this map when asking where a behavior lives or when a coding agent needs to 
 | Request/domain types | `src/shield/types.ts` |
 | Strict JSON request parsing | `src/shield/request.ts` |
 | Provider-specific input schema validation | `src/shield/input-validator.ts` |
-| Trusted provider definitions | `src/shield/registry.ts` |
+| Owned provider definitions | `src/shield/registry.ts` |
+| Network-selected curated external definitions | `src/shield/trusted-providers.ts` |
 | Resource count and spending policy | `src/shield/policy.ts` |
 | Quote creation / request hashing | `src/shield/quote.ts`, `src/shield/binding.ts` |
 
@@ -47,7 +50,7 @@ The public request is intentionally limited to `{ requestId, resources: [{ id, i
 | Response firewall | `src/shield/validator.ts` |
 | Owned deterministic demo resources | `src/routes/resources.ts` |
 
-`owned-demo` resources are hosted by this service. `external-curated` resources are independently hosted and must be explicitly trusted. Bazaar discovery alone never authorizes treasury spending.
+`owned-demo` resources are hosted by this service. `external-curated` resources are independently hosted and must be explicitly trusted. `getTrustedExternalProviders(networkName)` exposes only `external-algo-price` on TestNet or only `external-hash` on MainNet, and `src/app.ts` selects before building the registry. Bazaar discovery alone never authorizes treasury spending.
 
 ## HTTP routes
 
@@ -77,6 +80,7 @@ The public request is intentionally limited to `{ requestId, resources: [{ id, i
 | Shield paying-client lifecycle | `client/shield-client.ts` |
 | Deterministic three-resource demo | `client/scripted-shield-client.ts` |
 | Bounded OpenAI tool-calling agent | `client/agent-client.ts` |
+| Network-aware bounded tool schema/instructions | `client/shield-tool.ts` |
 | Model availability fallback | `client/openai-model.ts` |
 | Shared payer helpers | `client/lib.ts` |
 

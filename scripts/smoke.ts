@@ -31,7 +31,11 @@ if (live) {
   };
   const network = clientNetwork();
   const paying = createAvmPayingClient(mnemonic, network.name, captureFetch);
-  const request = createDemoShieldRequest(baseUrl, `smoke_${randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const request = createDemoShieldRequest(
+    baseUrl,
+    `smoke_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
+    network.name,
+  );
   const proof = await requestShieldJobWithProof(baseUrl, request, {
     fetchWithPayment: paying.fetchWithPayment,
     readSettlement: response => paying.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
@@ -79,9 +83,10 @@ if (live) {
     pass('/health and dashboard application initialize');
     const resources = await app.request('/api/shield/resources');
     const registry = await resources.json() as { resources: unknown[] };
-    if (registry.resources.length !== 3) throw new Error('Trusted registry must expose three resources.');
-    pass('trusted three-resource registry is public');
-    const request = createDemoShieldRequest(config.shield.baseUrl, 'smoke_quote');
+    if (registry.resources.length !== 4) throw new Error('Trusted registry must expose four active resources.');
+    pass('trusted four-resource registry is public');
+    const request = createDemoShieldRequest(config.shield.baseUrl, 'smoke_quote', config.networkName);
+    if (request.resources.length !== 3) throw new Error('Deterministic job must request exactly three resources.');
     const unpaid = await app.request('/api/shield/execute', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -91,7 +96,7 @@ if (live) {
       throw new Error('Shield endpoint did not return an official HTTP 402 challenge.');
     }
     const body = await unpaid.json() as { quote?: { quotedPriceAtomic?: number } };
-    if (body.quote?.quotedPriceAtomic !== 10_000) throw new Error('Dynamic quote should be 0.010000 USDC.');
+    if (body.quote?.quotedPriceAtomic !== 7_000) throw new Error('Dynamic quote should be 0.007000 USDC.');
     pass('valid three-resource job returns a bound, dynamic-price x402 challenge');
     const malformed = await app.request('/api/shield/execute', { method: 'POST', body: '{bad' });
     if (malformed.status !== 400) throw new Error('Malformed input was not rejected before payment.');

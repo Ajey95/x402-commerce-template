@@ -6,7 +6,11 @@ import { createDemoShieldRequest, requestShieldJobWithProof } from './shield-cli
 async function main() {
   const baseUrl = (process.env.API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
   const payer = createPayingClient();
-  const request = createDemoShieldRequest(baseUrl, `job_${randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const request = createDemoShieldRequest(
+    baseUrl,
+    `job_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
+    payer.network.name,
+  );
   console.log('CPMM-SHIELD scripted flow');
   console.log(`1. Discover and quote ${baseUrl}/api/shield/execute`);
   console.log(`2. Pay once from client ${payer.signer.address}`);

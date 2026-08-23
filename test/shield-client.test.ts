@@ -7,23 +7,39 @@ const request = {
 };
 
 describe('shield client', () => {
-  it('builds the deterministic demo without client-controlled provider URLs or schemas', () => {
+  it('builds the TestNet deterministic demo with the curated price provider by default', () => {
     const demo = createDemoShieldRequest('https://shield.test', 'job_demo');
     expect(demo).toEqual({
       requestId: 'job_demo',
       resources: [
-        { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3_000, required: true },
+        { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 2_000, required: true },
         { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3_000, required: true },
         {
-          id: 'sentiment-score',
-          input: { text: 'Algorand enables secure, scalable agentic payments.' },
-          maxPayment: 3_000,
+          id: 'external-algo-price',
+          input: {},
+          maxPayment: 1_000,
           required: true,
         },
       ],
     });
     expect(JSON.stringify(demo)).not.toContain('expectedSchema');
     expect(JSON.stringify(demo)).not.toContain('/api/resources/');
+  });
+
+  it('builds the MainNet deterministic demo with the curated hash provider', () => {
+    expect(createDemoShieldRequest('https://shield.test', 'job_mainnet', 'mainnet')).toEqual({
+      requestId: 'job_mainnet',
+      resources: [
+        { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 2_000, required: true },
+        { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3_000, required: true },
+        {
+          id: 'external-hash',
+          input: { text: 'CPMM-SHIELD', algo: 'sha256' },
+          maxPayment: 1_000,
+          required: true,
+        },
+      ],
+    });
   });
 
   it('requires a 402 quote, a successful paid response, and confirmed settlement', async () => {

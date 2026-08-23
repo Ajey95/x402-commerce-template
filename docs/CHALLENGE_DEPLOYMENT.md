@@ -53,6 +53,8 @@ CHALLENGE_MODE=true
 
 The code chooses MainNet USDC ASA `31566704`; the facilitator URL stays the same. The payer and receiver must be MainNet accounts. Transactions use real ALGO and USDC.
 
+CPMM-SHIELD exposes `external-hash` on MainNet and removes the TestNet-only `external-algo-price` ID from the trusted registry. Do not enable MainNet orchestration until buyer and treasury signing use an explicitly secure custody path, the intended accounts are deliberately funded and opted into USDC, and the team is prepared to verify real settlement evidence. `DEMO_MODE=true` remains prohibited on MainNet.
+
 Use one `payTo` consistently for x402 Commerce Template on its one root domain. Current Challenge guidance says not to reuse one merchant account across different root domains.
 
 ## 5. Real USDC Settlement
@@ -83,7 +85,9 @@ Keep it off for ordinary demo traffic so the distinction is visible.
 
 ## 8. Leaderboard and Submission
 
-Use the GoPlausible dashboard with the Global Challenge filter enabled. The current Challenge page says submissions are open and defines Standard, Composite, and Orchestrator entries. x402 Commerce Template is a Standard entry: one project, one paid endpoint, one price.
+Use the GoPlausible dashboard with the Global Challenge filter enabled. The current Challenge page defines Standard, Composite, and Orchestrator entries. CPMM-SHIELD is an **Orchestrator entry** because one paid shield request coordinates three downstream x402 resources through an isolated treasury and returns one validated signed receipt.
+
+The deterministic TestNet flow requests owned weather (2000 atomic), owned company lookup (3000 atomic), and independently hosted `external-algo-price` (1000 atomic), plus the 1000-atomic shield fee for a 0.007000-USDC quote. MainNet selects independently hosted `external-hash` instead. Registry presence, simulation, or unpaid challenges do not prove live settlement.
 
 Leaderboard ranking depends on real on-chain usage, not the number of local requests. Submit through the current official Challenge page and keep evidence of the endpoint, payment unlock, settlement, and genuine users.
 
@@ -93,7 +97,10 @@ Leaderboard ranking depends on real on-chain usage, not the number of local requ
 - [ ] Full TestNet payment/settlement/paid-response flow works
 - [ ] Endpoint is deployed to a public HTTPS domain
 - [ ] `ALGORAND_NETWORK=mainnet`
+- [ ] Active registry contains `external-hash` and excludes `external-algo-price`
 - [ ] MainNet USDC ASA is `31566704`
+- [ ] Buyer and treasury use an approved secure MainNet signer/custody path
+- [ ] Accounts are deliberately funded and opted into the intended MainNet USDC asset
 - [ ] MainNet `payTo` is opted into USDC
 - [ ] GoPlausible is the configured facilitator
 - [ ] Bazaar extension and valid route metadata are enabled

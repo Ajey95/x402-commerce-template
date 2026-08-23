@@ -140,8 +140,26 @@ describe('CPMM-SHIELD API', () => {
         { id: 'weather', trust: 'owned-demo', priceAtomic: 2_000 },
         { id: 'company-lookup', trust: 'owned-demo', priceAtomic: 3_000 },
         { id: 'sentiment-score', trust: 'owned-demo', priceAtomic: 2_000 },
+        {
+          id: 'external-algo-price',
+          trust: 'external-curated',
+          priceAtomic: 1_000,
+          content: 'PROVIDER CONTENT',
+        },
       ],
     });
+
+    const publicBody = await createApp(testConfig).request('/api/shield/resources').then(response => response.json());
+    expect(JSON.stringify(publicBody)).not.toMatch(/payTo|responseSchema|mnemonic|privateKey/i);
+  });
+
+  it('exposes only the active network external provider', async () => {
+    const mainnet = { ...testConfig, networkName: 'mainnet' as const };
+    const resources = await createApp(mainnet).request('/api/shield/resources');
+    const body = await resources.json() as { resources: Array<{ id: string }> };
+
+    expect(body.resources.map(resource => resource.id)).toContain('external-hash');
+    expect(body.resources.map(resource => resource.id)).not.toContain('external-algo-price');
   });
 
   it('rejects malformed and untrusted jobs before generating a payment challenge', async () => {
@@ -179,6 +197,24 @@ describe('CPMM-SHIELD API', () => {
     expect(response.status).toBe(400);
     expect(response.headers.get('payment-required')).toBeNull();
     await expect(response.json()).resolves.toMatchObject({ error: 'invalid_resource_input' });
+  });
+
+  it.each([
+    ['testnet', 'external-hash'],
+    ['mainnet', 'external-algo-price'],
+  ] as const)('rejects the %s cross-network provider before a payment challenge', async (networkName, id) => {
+    const response = await createApp({ ...testConfig, networkName }).request('/api/shield/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        requestId: `job_cross_${networkName}`,
+        resources: [{ id, input: {}, maxPayment: 1_000, required: true }],
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('payment-required')).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({ error: 'resource_not_allowed' });
   });
 
   it('rejects legacy client-controlled URL and schema fields', async () => {
