@@ -2,7 +2,7 @@ services:
   - type: web
     name: cpmm-shield
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -16,31 +16,5 @@ services:
         sync: false
       - key: PAY_TO_ADDRESS
         sync: false
-      - key: CLIENT_MNEMONIC
-        sync: false
       - key: TREASURY_MNEMONIC
         sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-name: ci
-
-on:
-  push:
-  pull_request:
-
-jobs:
-  verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.28.2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build
-      - run: pnpm test
-      - run: pnpm smoke
