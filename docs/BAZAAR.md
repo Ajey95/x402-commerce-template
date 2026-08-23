@@ -20,12 +20,14 @@ flowchart LR
 
 ## Configuration
 
-[src/x402/config.ts](../src/x402/config.ts) registers `bazaarResourceServerExtension` once and attaches a declared discovery extension to the protected route. The default metadata describes the sample wallet route; custom projects should replace it with their real paid resource. The declaration contains:
+[src/x402/config.ts](../src/x402/config.ts) uses the current `@x402/extensions` package, registers `bazaarResourceServerExtension` once per resource server, and attaches declared discovery metadata to both public paid entry points. The wallet GET declaration remains query-parameter based. The CPMM-SHIELD declaration explicitly uses `bodyType: "json"`, so Bazaar receives its example request as a POST body rather than as query parameters. The declarations contain:
 
 - a specific human- and machine-readable resource description;
 - an example input and validation-oriented input schema;
 - an example output result;
 - `extra.tag = x402-global-challenge` when `CHALLENGE_MODE=true`.
+
+Owned demo resource challenges also pin `resource.url` to each registry definition's HTTPS origin and path. They do not rely on proxy-derived request URLs, which can appear as HTTP behind a hosted reverse proxy.
 
 The extension is carried in the `402` and copied into the paid payload. GoPlausible can catalog it when settlement traffic passes through the facilitator.
 

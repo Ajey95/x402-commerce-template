@@ -2,8 +2,8 @@ import { ExactAvmScheme } from '@x402/avm/exact/server';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import type { ResourceServerExtension } from '@x402/core/types';
 import type { RoutesConfig } from '@x402/core/server';
+import { bazaarResourceServerExtension, declareDiscoveryExtension } from '@x402/extensions';
 import { paymentMiddleware, x402HTTPResourceServer, x402ResourceServer } from '@x402/hono';
-import { bazaarResourceServerExtension, declareDiscoveryExtension } from '@x402-avm/extensions';
 import type { RuntimeConfig } from '../config.js';
 import type { QuoteService } from '../shield/quote.js';
 import type { ResourceRegistry } from '../shield/registry.js';
@@ -78,6 +78,7 @@ export function createX402Middleware(config: RuntimeConfig, registry?: ResourceR
     if (definition.trust !== 'owned-demo') continue;
     routes[`${definition.method} ${definition.path}`] = {
       accepts: [paymentOption(config, `$${(definition.priceAtomic / 1_000_000).toFixed(6)}`)],
+      resource: `${definition.origin}${definition.path}`,
       description: `${definition.description} SIMULATED CONTENT / REAL TESTNET PAYMENT.`,
       mimeType: 'application/json',
       serviceName: 'cpmm-shield downstream demo resources',
@@ -89,6 +90,7 @@ export function createX402Middleware(config: RuntimeConfig, registry?: ResourceR
 
 export function createShieldHttpServer(config: RuntimeConfig, quotes: QuoteService) {
   const discovery = declareDiscoveryExtension({
+    bodyType: 'json',
     input: {
       requestId: 'job_123',
       resources: [

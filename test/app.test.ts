@@ -112,6 +112,29 @@ describe('CPMM-SHIELD HTTP API', () => {
     expect(indexerFetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['GET', '/api/resources/weather?city=Bangalore', '/api/resources/weather'],
+    ['GET', '/api/resources/company-lookup?name=Algorand%20Foundation', '/api/resources/company-lookup'],
+    ['POST', '/api/resources/sentiment-score', '/api/resources/sentiment-score'],
+  ])('publishes the explicit HTTPS URL for the %s owned resource', async (method, requestPath, definitionPath) => {
+    const response = await createApp(testConfig).request(requestPath, {
+      method,
+      ...(method === 'POST'
+        ? {
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: 'Secure and fast.' }),
+          }
+        : {}),
+    });
+    const encoded = response.headers.get('payment-required');
+    expect(encoded).toBeTruthy();
+
+    const challenge = JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8')) as {
+      resource: { url: string };
+    };
+    expect(challenge.resource.url).toBe(`${testConfig.shield.baseUrl}${definitionPath}`);
+  });
+
   it('adds the Challenge tag only when challenge mode is enabled', async () => {
     const app = createApp({ ...testConfig, challengeMode: true });
     const response = await app.request(

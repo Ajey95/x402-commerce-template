@@ -6,7 +6,7 @@
 
 **Architecture:** Preserve the existing Hono + official `@x402/*` AVM payment stack, GoPlausible facilitator, settlement-first middleware, treasury payer, and signed receipt flow. Move all security-sensitive provider metadata to a server-owned trusted registry; clients submit only trusted resource IDs, bounded provider-specific input, payment ceilings, and required flags. VibeKit remains a coding-agent knowledge/tooling layer and never enters the runtime transaction path.
 
-**Tech Stack:** Node 20+, TypeScript 5.9, Hono 4, `@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/avm`, `@x402-avm/extensions`, Algorand SDK 3.6, Zod 3.25, Vitest 4, pnpm 10, OpenAI Responses API, GoPlausible facilitator.
+**Tech Stack:** Node 20+, TypeScript 5.9, Hono 4, `@x402/core`, `@x402/hono`, `@x402/fetch`, `@x402/avm`, `@x402/extensions`, Algorand SDK 3.6, Zod 3.25, Vitest 4, pnpm 10, OpenAI Responses API, GoPlausible facilitator.
 
 **Spec:** `docs/superpowers/specs/2026-08-23-cpmm-shield-complete-design.md`
 

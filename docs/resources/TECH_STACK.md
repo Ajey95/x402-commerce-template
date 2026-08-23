@@ -22,7 +22,7 @@ This template is intentionally small and TypeScript-first. It gives participants
 | x402 server middleware | `@x402/hono` |
 | x402 core types/client pieces | `@x402/core` |
 | Algorand x402 scheme | `@x402/avm` |
-| Bazaar discovery extension | `@x402-avm/extensions` |
+| Bazaar discovery extension | `@x402/extensions` 2.19.x, aligned with x402 core |
 | Facilitator | GoPlausible facilitator |
 | Settlement chain | Algorand |
 | Default local network | Algorand TestNet |
