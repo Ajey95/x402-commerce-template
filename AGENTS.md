@@ -1,37 +1,67 @@
 # AGENTS.md
 
-This repository is an x402 agentic commerce template for Algorand. Your job is to help the participant turn a short business idea into a working paid endpoint that can be called by agents.
+This repository contains CPMM-SHIELD, a settlement-first x402 payment firewall and orchestrator for AI agents on Algorand.
+
+## Agent Knowledge Layer
+
+Before changing payment, wallet, provider, or discovery code:
+
+1. Read `PROJECT_BRIEF.md`, `skills.md`, `README.md`, the approved design under `docs/superpowers/specs/`, and the docs under `docs/resources/`.
+2. Read `skills/cpmm-shield-x402/SKILL.md`.
+3. If VibeKit / Algorand Agent Skills are installed in the coding environment, use the canonical `algorand-x402-typescript` guidance for AVM/x402 work.
+4. Merge generic VibeKit/Algorand guidance with this file. **Project-specific invariants in this repository take precedence.** Never overwrite this file with generated agent instructions.
+5. VibeKit is a development/agent-knowledge layer. Do not add VibeKit to the runtime settlement path unless a future approved design explicitly requires it.
+
+See `docs/resources/VIBEKIT_X402_AGENT_GUIDE.md` and `docs/resources/HACKCULTURE_RESOURCES.md`.
 
 ## Default Goal
 
-When the participant says what they want to build, implement it end to end:
+When the participant asks to extend CPMM-SHIELD, implement the requested behavior end to end while preserving the payment-security boundary:
 
-1. Read `PROJECT_BRIEF.md`, `skills.md`, `README.md`, and the docs under `docs/resources/`.
-2. Keep the payment lifecycle intact: unpaid request returns `402`, paid retry verifies through the facilitator, settlement occurs on Algorand, and only then the resource returns data.
-3. Replace the default sample resource only where needed: route path, input validation, business logic, Bazaar metadata, dashboard labels, tests, and client target URL.
-4. Keep secrets local. Never print or commit `.env`, mnemonics, private keys, API keys, or funded wallet credentials.
-5. Verify with `pnpm build`, `pnpm test`, `pnpm smoke`, `pnpm simulate`, and at least one client flow when env vars are configured.
+1. Parse and validate malformed input before any x402 challenge.
+2. Resolve provider information only from the server-owned trusted registry.
+3. Keep the payment lifecycle intact: unpaid valid request returns `402`, paid retry verifies through the facilitator, settlement occurs on Algorand, and only then orchestration begins.
+4. Downstream payments use the isolated treasury payer.
+5. Treat downstream HTTP success as insufficient. Require settlement confirmation and response validation before aggregation.
+6. Keep secrets local. Never print or commit `.env`, mnemonics, private keys, API keys, or funded wallet credentials.
+7. Keep Bazaar metadata truthful when the public contract changes.
+8. Verify with `pnpm build`, `pnpm test`, `pnpm smoke`, `pnpm simulate`, `pnpm x402 inspect`, and `pnpm x402 checklist`. Run live TestNet acceptance only when disposable funded credentials are actually available.
 
-## x402 Invariants
+## CPMM-SHIELD x402 Invariants
 
-- The protected route must be registered in `src/x402/config.ts`.
-- Invalid input should be rejected before x402 middleware so users are not charged for malformed requests.
-- `PAY_TO_ADDRESS` is the public receiver address only. The server does not need the receiver private key.
-- `CLIENT_MNEMONIC` is only for local TestNet paying clients and the optional demo agent.
-- `DEMO_MODE=true` is TestNet-only and must not be deployed with a production mnemonic.
-- The paid client should treat a `200` response as complete only when the settlement receipt header reports success.
-- Bazaar discovery metadata must describe the real resource, input schema, output shape, price, and use case. Do not leave placeholder metadata after customizing.
+- The primary protected route is `POST /api/shield/execute` and must remain registered in `src/x402/config.ts`.
+- Invalid input must be rejected before x402 middleware so callers are never charged for malformed requests.
+- The public shield request may contain only a trusted resource `id`, provider-specific `input`, `maxPayment`, and `required` flag.
+- Clients and AI models must not choose arbitrary provider URLs, response schemas, recipient addresses, networks, or assets.
+- Provider URL/method/input schema/response schema/pricing/trust metadata comes from `src/shield/registry.ts` and explicitly curated provider definitions.
+- Bazaar discovery is discovery, not authorization. Never automatically trust or pay a newly discovered endpoint.
+- `PAY_TO_ADDRESS` is the public upstream receiver address only. The receiver private key is not required by the server.
+- `CLIENT_MNEMONIC` is only for disposable TestNet paying clients and the optional demo agent.
+- `TREASURY_MNEMONIC` is the isolated downstream TestNet payer and receipt signer in this hackathon build.
+- `DEMO_MODE=true` is TestNet-only and must never be enabled for Mainnet.
+- A paid client must treat a `200` response as complete only when the settlement receipt reports success.
+- The shield must not execute downstream work until upstream facilitator settlement is confirmed.
+- Downstream calls must reject redirects, require successful x402 settlement, require JSON, enforce byte limits, and pass the trusted response schema before results are exposed to the AI.
+- A settled but invalid downstream response still counts as spent money and must be visible in the signed receipt.
+- Replayed payment proofs must remain rejected.
+- Bazaar discovery metadata must describe the real request contract, output, price behavior, and use case. Do not leave placeholder metadata after changes.
+- Owned demonstration providers must remain visibly labeled `SIMULATED CONTENT / REAL TESTNET PAYMENT` when the payment path is live.
+- In-memory jobs, replay reservations, quote state, and audit events are hackathon limitations, not production durability.
 
-## Customization Checklist
+## Trusted Provider Change Checklist
 
-- Rename the service in `package.json`, `README.md`, `src/server.ts`, and frontend text.
-- Change the route from `/api/wallet/:address` if the participant is not selling the default wallet-data example.
-- Update `src/routes/wallet.ts` or create a new route module for the participant's paid resource.
-- Update `src/x402/config.ts` with the new protected route, resource description, input schema, output example, and Bazaar discovery metadata.
-- Update `client/lib.ts` so clients call the new paid URL.
-- Update `src/web/*` so the dashboard shows the participant's payment flow.
-- Update tests in `test/` to cover the new route, 402 behavior, and invalid-input behavior.
-- Keep `docs/resources/` accurate when adding new facilitator, Bazaar, client, or deployment patterns.
+When adding or changing a downstream provider:
+
+1. Add or update the `ResourceDefinition` with explicit `origin`, `path`, `method`, `priceAtomic`, `inputSchema`, `responseSchema`, `trust`, description, and tags.
+2. Never accept provider URL/schema overrides from the public request.
+3. Add provider-input validation tests that fail before payment.
+4. Add provider request-mapping tests for the exact query/body sent to the trusted origin.
+5. Confirm the treasury client still requires a downstream settlement receipt.
+6. Add response-schema and unsafe-response boundary tests.
+7. Expose only safe provider metadata from `GET /api/shield/resources`.
+8. Update the OpenAI tool only if the provider should be available to the agent.
+9. Update Bazaar/dashboard/docs if the public shield capability changed.
+10. Run the full verification commands before claiming completion.
 
 ## How To Answer Participant Questions
 
@@ -43,16 +73,18 @@ Use local docs first:
 - `docs/resources/BAZAAR_DISCOVERY.md` for discoverability.
 - `docs/resources/AGENTIC_COMMERCE_PATTERNS.md` for paid service ideas.
 - `docs/resources/TROUBLESHOOTING_PLAYBOOK.md` for debugging.
+- `docs/resources/HACKCULTURE_RESOURCES.md` for the exact organizer resource list.
+- `docs/resources/VIBEKIT_X402_AGENT_GUIDE.md` for the VibeKit/Algorand coding-agent workflow.
 
-Use external docs only when local docs are insufficient or current deployment rules may have changed.
+Use current external documentation when deployment rules, package APIs, network identifiers, asset IDs, or facilitator behavior may have changed.
 
 ## Done Definition
 
-A customized template is done when:
+A CPMM-SHIELD change is done only when:
 
 - `pnpm build` and `pnpm test` pass.
-- `pnpm smoke` can reach `/health` and the protected route emits `402`.
-- A paid TestNet request settles through GoPlausible.
-- The dashboard demonstrates challenge, signing, retry, settlement, and receipt.
-- `README.md` and `PROJECT_BRIEF.md` explain the participant's actual service.
-- `.env.example` documents every required value without secrets.
+- `pnpm smoke` reaches `/health`, validates the trusted registry, rejects malformed input before payment, and receives an official `402` from the shield route.
+- `pnpm simulate`, `pnpm x402 inspect`, and `pnpm x402 checklist` pass or report the expected non-live state.
+- A paid TestNet request settles through GoPlausible when disposable funded credentials are available; never fabricate this evidence.
+- The dashboard demonstrates policy, challenge, upstream settlement, treasury execution, validation, and signed receipt.
+- `README.md`, `PROJECT_BRIEF.md`, and `.env.example` accurately describe the actual implementation and its limitations.
