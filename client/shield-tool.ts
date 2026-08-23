@@ -23,7 +23,7 @@ export function createShieldTool(networkName: AlgorandNetwork) {
     ? resourceVariant('external-algo-price', exactInput({}, []))
     : resourceVariant('external-hash', exactInput({
       text: { type: 'string', maxLength: 5_000 },
-      algo: { type: 'string', maxLength: 8 },
+      algo: { type: 'string', maxLength: 8, enum: ['sha256', 'sha512', 'sha1', 'md5'] },
     }, ['text', 'algo']));
 
   return {

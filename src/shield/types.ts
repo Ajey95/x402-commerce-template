@@ -3,6 +3,7 @@ export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILUR
 export interface JsonSchemaProperty {
   type: 'string' | 'number' | 'boolean';
   maxLength?: number;
+  enum?: string[];
 }
 
 export interface JsonObjectSchema {

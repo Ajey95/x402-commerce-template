@@ -38,6 +38,9 @@ export function validateExactObject(input: unknown, schema: JsonObjectSchema): I
       if (property.maxLength !== undefined && value.length > property.maxLength) {
         return rejected(`Resource input field ${key} exceeds ${property.maxLength} characters.`);
       }
+      if (property.enum !== undefined && !property.enum.includes(value)) {
+        return rejected(`Resource input field ${key} must be one of: ${property.enum.join(', ')}.`);
+      }
     }
   }
 

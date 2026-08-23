@@ -4,6 +4,7 @@ import { AuditLog } from '../src/shield/audit.js';
 import { InMemoryJobStore } from '../src/shield/jobs.js';
 import { evaluatePolicy } from '../src/shield/policy.js';
 import { createResourceRegistry } from '../src/shield/registry.js';
+import { getTrustedExternalProviders } from '../src/shield/trusted-providers.js';
 import { parseExecuteShieldRequest } from '../src/shield/request.js';
 import type { ExecuteShieldRequest, ResourceDefinition, ShieldConfig } from '../src/shield/types.js';
 
@@ -141,6 +142,24 @@ describe('shield resource registry and spending policy', () => {
       resources: [{ id: 'external-research', input: { query: 'Algorand' }, maxPayment: 3_000, required: true }],
     }, shieldConfig, registry);
     expect(result).toMatchObject({ ok: true, quotedPriceAtomic: 4_000 });
+  });
+
+  it('rejects an unsupported external hash algorithm during policy evaluation before payment', () => {
+    const registry = createResourceRegistry(
+      shieldConfig.baseUrl,
+      getTrustedExternalProviders('mainnet'),
+    );
+    const result = evaluatePolicy({
+      requestId: 'job_bad_hash_algo',
+      resources: [{
+        id: 'external-hash',
+        input: { text: 'CPMM-SHIELD', algo: 'garbage' },
+        maxPayment: 1_000,
+        required: true,
+      }],
+    }, shieldConfig, registry);
+
+    expect(result).toMatchObject({ ok: false, code: 'invalid_resource_input' });
   });
 
   it('rejects duplicate resources and excessive counts', () => {
