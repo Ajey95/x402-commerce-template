@@ -20,8 +20,8 @@ export function renderPage(config: RuntimeConfig): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="CPMM-SHIELD orchestrates one x402 payment into multiple validated Algorand resources." />
-    <title>CPMM-SHIELD — Protected x402 orchestration</title>
+    <meta name="description" content="CPMM-SHIELD is a settlement-first x402 payment firewall for AI agents on Algorand." />
+    <title>CPMM-SHIELD — x402 payment firewall</title>
     <link rel="stylesheet" href="/assets/styles.css" />
     <script src="/assets/app.js" defer></script>
   </head>
@@ -30,28 +30,29 @@ export function renderPage(config: RuntimeConfig): string {
     <header class="site-header">
       <a class="brand" href="/" aria-label="CPMM-SHIELD home">
         <span class="brand-mark" aria-hidden="true"></span>
-        <span><b>CPMM</b>-SHIELD<small>SECURE x402 ORCHESTRATION</small></span>
+        <span><b>CPMM</b>-SHIELD<small>x402 PAYMENT FIREWALL</small></span>
       </a>
       <div class="header-meta">
         <span class="live-dot"></span><span>ALGORAND ${network}</span>
         <span class="divider"></span><span>${mode}</span>
+        <span class="divider"></span><span>${config.challengeMode ? 'CHALLENGE TAG ON' : 'CHALLENGE TAG OFF'}</span>
       </div>
     </header>
 
     <main>
       <section class="overview">
         <div class="intro">
-          <p class="kicker">AGENTIC COMMERCE · POLICY-BOUND EXECUTION</p>
+          <p class="kicker">AGENTIC COMMERCE · SETTLEMENT-FIRST EXECUTION</p>
           <h1 aria-label="One payment in. Many protected resources out.">One payment in.<br /><em>Many protected resources out.</em></h1>
-          <p class="lede">CPMM-SHIELD settles one upstream x402 payment, isolates the client wallet, pays trusted resources from a dedicated treasury, validates every payload, and signs one auditable receipt.</p>
+          <p class="lede">CPMM-SHIELD lets an AI agent authorize one bounded x402 payment. The shield settles that payment first, then pays only trusted downstream providers from an isolated treasury, validates every response, and returns one signed receipt.</p>
           <div class="truth-labels"><span class="sim-label">SIMULATED CONTENT</span><span class="real-label">REAL TESTNET PAYMENT</span></div>
         </div>
         <div class="metric-grid" aria-label="Shield summary">
-          <article><span>UPFRONT QUOTE</span><strong id="metric-upfront">—</strong><small>USDC</small></article>
+          <article><span>UPSTREAM PAYMENT</span><strong id="metric-upfront">—</strong><small>USDC</small></article>
           <article><span>DOWNSTREAM</span><strong id="metric-downstream">—</strong><small>USDC</small></article>
           <article><span>REMAINING</span><strong id="metric-remaining">—</strong><small>BUDGET</small></article>
-          <article><span>RESOURCES</span><strong id="metric-resources">0/3</strong><small>COMPLETED</small></article>
-          <article><span>VALIDATION</span><strong id="metric-validation">0/3</strong><small>PASSED</small></article>
+          <article><span>TRUSTED PROVIDERS</span><strong id="metric-resources">0/3</strong><small>COMPLETED</small></article>
+          <article><span>RESPONSE FIREWALL</span><strong id="metric-validation">0/3</strong><small>PASSED</small></article>
           <article class="treasury-card"><span>TREASURY</span><strong id="metric-treasury">${config.treasuryMnemonic ? 'READY' : 'NOT SET'}</strong><small title="${receiver}">${receiver.slice(0, 7)}…${receiver.slice(-5)}</small></article>
         </div>
       </section>
@@ -59,26 +60,26 @@ export function renderPage(config: RuntimeConfig): string {
       <section class="flow-panel" aria-labelledby="flow-title">
         <div class="section-heading"><div><p class="kicker">CONTROL PLANE</p><h2 id="flow-title">Execution flow</h2></div><span id="flow-state" class="state-pill">READY</span></div>
         <div class="flow" aria-label="Client to protected resources flow">
-          <div class="flow-node primary" data-flow="client"><span class="node-index">01</span><b>AI client</b><small>One signed intent</small></div>
-          <span class="connector"><i></i><small>REQUEST</small></span>
-          <div class="flow-node" data-flow="quote"><span class="node-index">02</span><b>HTTP 402</b><small>Bound job quote</small></div>
+          <div class="flow-node primary" data-flow="client"><span class="node-index">01</span><b>AI client</b><small>Trusted IDs + bounded inputs</small></div>
+          <span class="connector"><i></i><small>POLICY</small></span>
+          <div class="flow-node" data-flow="quote"><span class="node-index">02</span><b>HTTP 402</b><small>HMAC-bound quote</small></div>
           <span class="connector"><i></i><small>SETTLE</small></span>
-          <div class="flow-node shield-node" data-flow="shield"><span class="shield-mini"></span><b>CPMM-SHIELD</b><small>Policy · pay · validate</small></div>
+          <div class="flow-node shield-node" data-flow="shield"><span class="shield-mini"></span><b>CPMM-SHIELD</b><small>Verify · settle · orchestrate</small></div>
           <span class="connector"><i></i><small>TREASURY</small></span>
           <div class="resource-stack">
             <div data-resource="weather"><span>W</span><p><b>Weather</b><small>Waiting</small></p><i></i></div>
             <div data-resource="company-lookup"><span>C</span><p><b>Company lookup</b><small>Waiting</small></p><i></i></div>
             <div data-resource="sentiment-score"><span>S</span><p><b>Sentiment score</b><small>Waiting</small></p><i></i></div>
           </div>
-          <span class="connector"><i></i><small>SIGN</small></span>
-          <div class="flow-node result-node" data-flow="result"><span class="node-index">06</span><b>Receipt</b><small>Aggregated result</small></div>
+          <span class="connector"><i></i><small>FIREWALL</small></span>
+          <div class="flow-node result-node" data-flow="result"><span class="node-index">06</span><b>Signed receipt</b><small>Validated aggregate result</small></div>
         </div>
       </section>
 
       <section class="console-grid">
         <article class="runner-panel">
           <div class="section-heading compact"><div><p class="kicker">JOB COMPOSER</p><h2>Run a protected job</h2></div><span class="network-chip">ASA ${escapeHtml(config.usdcAssetId)}</span></div>
-          <p class="panel-copy">Builds a three-resource request, validates policy, and returns a real x402 quote. With local demo credentials configured, the server-side payer can complete it without exposing keys to this browser.</p>
+          <p class="panel-copy">The browser submits only trusted resource IDs, provider-specific inputs, and payment ceilings. Provider URLs, response schemas, network, asset, and recipients remain server-controlled. Policy runs before any payment challenge.</p>
           <form id="shield-form">
             <label for="job-description">Agent goal</label>
             <textarea id="job-description" rows="3">Get Bangalore weather, look up Algorand Foundation, and score this review: “Secure, scalable and fast.”</textarea>
@@ -93,15 +94,15 @@ export function renderPage(config: RuntimeConfig): string {
         </article>
 
         <aside class="registry-panel">
-          <div class="section-heading compact"><div><p class="kicker">ALLOWLIST</p><h2>Trusted resources</h2></div><span id="registry-count">3 ACTIVE</span></div>
+          <div class="section-heading compact"><div><p class="kicker">TRUST BOUNDARY</p><h2>Trusted providers</h2></div><span id="registry-count">3 ACTIVE</span></div>
           <div id="resource-registry" class="registry-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
-          <div class="policy-note"><span aria-hidden="true">⌁</span><p><b>Exact URL policy</b><small>Private networks, redirects, duplicate spend, excess price, and oversized payloads are rejected.</small></p></div>
+          <div class="policy-note"><span aria-hidden="true">⌁</span><p><b>Trusted provider policy</b><small>Clients cannot override provider URL, schema, recipient, network, or asset. Redirects, replay, excess spend, oversized payloads, malformed JSON, schema violations, and blocked instruction markers are rejected.</small></p></div>
         </aside>
       </section>
 
       <section class="results-grid">
         <article class="result-panel">
-          <div class="section-heading compact"><div><p class="kicker">SIGNED OUTPUT</p><h2>Aggregated result</h2></div><span id="result-status" class="state-pill neutral">NO RECEIPT</span></div>
+          <div class="section-heading compact"><div><p class="kicker">SIGNED OUTPUT</p><h2>Signed receipt</h2></div><span id="result-status" class="state-pill neutral">NO RECEIPT</span></div>
           <pre id="result-json">{
   "status": "awaiting_settlement",
   "message": "Run a quote or execute the paid CLI flow."
@@ -114,7 +115,7 @@ export function renderPage(config: RuntimeConfig): string {
         </article>
       </section>
     </main>
-    <footer><span>CPMM-SHIELD · AGENTIC SOLUTIONS TRACK</span><span>HTTP 402 → ALGORAND USDC → VALIDATED JSON</span></footer>
+    <footer><span>CPMM-SHIELD · AGENTIC SOLUTIONS TRACK</span><span>HTTP 402 → ALGORAND USDC → SETTLEMENT → RESPONSE FIREWALL → SIGNED RECEIPT</span></footer>
   </body>
 </html>`;
 }
