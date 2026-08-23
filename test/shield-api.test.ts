@@ -1,4 +1,5 @@
 import algosdk from 'algosdk';
+import { validateDiscoveryExtensionSpec } from '@x402/extensions/bazaar';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { createReceiptSigner } from '../src/shield/receipt.js';
@@ -252,6 +253,40 @@ describe('CPMM-SHIELD API', () => {
       error: 'payment_required',
       quote: { jobId: 'job_123', quotedPriceAtomic: 4_000 },
     });
+  });
+
+  it('declares the shield POST request as a Bazaar JSON body', async () => {
+    const response = await createApp(testConfig).request('/api/shield/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(shieldRequest),
+    });
+    const encoded = response.headers.get('payment-required');
+    expect(encoded).toBeTruthy();
+
+    const challenge = JSON.parse(Buffer.from(encoded!, 'base64url').toString('utf8')) as {
+      extensions: {
+        bazaar: {
+          info: {
+            input: {
+              method: string;
+              bodyType?: string;
+              body?: unknown;
+              queryParams?: unknown;
+            };
+          };
+        };
+      };
+    };
+    const input = challenge.extensions.bazaar.info.input;
+
+    expect(validateDiscoveryExtensionSpec(challenge.extensions.bazaar)).toEqual({ valid: true });
+    expect(input).toMatchObject({
+      method: 'POST',
+      bodyType: 'json',
+      body: shieldRequest,
+    });
+    expect(input).not.toHaveProperty('queryParams');
   });
 
   it('settles upstream before orchestration and returns a signed cached job', async () => {
