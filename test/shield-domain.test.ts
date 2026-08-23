@@ -118,6 +118,7 @@ describe('shield resource registry and spending policy', () => {
       path: '/api/research',
       priceAtomic: 2_500,
       maxPriceAtomic: 3_000,
+      payTo: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ',
       inputSchema: {
         type: 'object',
         required: ['query'],
