@@ -59,7 +59,25 @@ Use one `payTo` consistently for x402 Commerce Template on its one root domain. 
 
 ## 5. Real USDC Settlement
 
-Run `pnpm client:paid` against the public MainNet URL. Require all three proofs:
+Run the orchestrator client against the public MainNet URL:
+
+```bash
+pnpm demo:scripted
+```
+
+For the full replay-aware shield acceptance path, run:
+
+```bash
+LIVE_X402=true pnpm smoke
+```
+
+PowerShell:
+
+```powershell
+$env:LIVE_X402='true'; pnpm smoke
+```
+
+These commands target `POST /api/shield/execute`; `pnpm client:paid` targets the legacy wallet resource and is not Orchestrator evidence. Require all three proofs:
 
 1. paid JSON response;
 2. successful x402 settlement receipt and confirmed transaction;
