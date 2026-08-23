@@ -1,29 +1,12 @@
 import { z } from 'zod';
 import type { ExecuteShieldRequest } from './types.js';
 
-const schemaProperty = z
-  .object({
-    type: z.enum(['string', 'number', 'boolean']),
-    maxLength: z.number().int().positive().max(10_000).optional(),
-  })
-  .strict();
-
-const declaredSchema = z
-  .object({
-    type: z.literal('object'),
-    required: z.array(z.string().min(1).max(80)).max(30),
-    properties: z.record(schemaProperty).default({}),
-    additionalProperties: z.literal(false).default(false),
-  })
-  .strict();
-
 const requestedResource = z
   .object({
     id: z.string().min(1).max(80),
-    url: z.string().min(1).max(2_048),
+    input: z.record(z.unknown()).default({}),
     maxPayment: z.number().int().nonnegative(),
     required: z.boolean().default(true),
-    expectedSchema: declaredSchema,
   })
   .strict();
 
@@ -54,4 +37,3 @@ export function parseExecuteShieldRequest(value: unknown): ExecuteShieldRequest 
   }
   return result.data;
 }
-
