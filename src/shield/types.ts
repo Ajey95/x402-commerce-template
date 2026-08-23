@@ -12,12 +12,13 @@ export interface JsonObjectSchema {
   additionalProperties: false;
 }
 
+export type JsonObject = Record<string, unknown>;
+
 export interface RequestedResource {
   id: string;
-  url: string;
+  input: JsonObject;
   maxPayment: number;
-  required?: boolean;
-  expectedSchema: JsonObjectSchema;
+  required: boolean;
 }
 
 export interface ExecuteShieldRequest {
@@ -39,10 +40,19 @@ export interface ShieldConfig {
 
 export interface ResourceDefinition {
   id: string;
+  name: string;
+  origin: string;
   method: 'GET' | 'POST';
   path: string;
   priceAtomic: number;
-  schema: JsonObjectSchema;
+  maxPriceAtomic?: number;
+  inputSchema: JsonObjectSchema;
+  responseSchema: JsonObjectSchema;
+  trust: 'owned-demo' | 'external-curated';
+  description: string;
+  tags: string[];
+  timeoutMs?: number;
+  maxResponseBytes?: number;
 }
 
 export interface ResourceOutcome {
@@ -114,4 +124,3 @@ export interface AuditEvent {
   errorCode?: string;
   details?: Record<string, unknown>;
 }
-
