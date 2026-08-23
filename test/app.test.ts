@@ -27,18 +27,20 @@ describe('CPMM-SHIELD HTTP API', () => {
     );
   });
 
-  it('keeps the health route public', async () => {
+  it('keeps the health route public and exposes non-secret readiness metadata', async () => {
     const response = await createApp(testConfig).request('/health');
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: 'ok',
       service: 'cpmm-shield',
       network: testConfig.network,
+      challengeMode: false,
+      facilitatorUrl: testConfig.facilitatorUrl,
       treasuryReady: false,
     });
   });
 
-  it('serves the CPMM-SHIELD operations dashboard and browser assets', async () => {
+  it('serves the judge-facing CPMM-SHIELD operations dashboard and browser assets', async () => {
     const app = createApp(testConfig);
     const [page, styles, script] = await Promise.all([
       app.request('/'),
@@ -48,14 +50,18 @@ describe('CPMM-SHIELD HTTP API', () => {
 
     expect(page.status).toBe(200);
     const html = await page.text();
-    expect(html).toContain('One payment in. Many protected resources out.');
+    expect(html).toContain('One payment in.');
+    expect(html).toContain('Many protected resources out.');
     expect(html).toContain('SIMULATED CONTENT');
     expect(html).toContain('REAL TESTNET PAYMENT');
-    expect(html).toContain('Execution flow');
-    expect(html).toContain('Audit trail');
+    expect(html).toContain('Upstream payment');
+    expect(html).toContain('Trusted providers');
+    expect(html).toContain('Response firewall');
+    expect(html).toContain('Signed receipt');
     expect(html).toContain('Run shield quote');
     expect(styles.headers.get('content-type')).toContain('text/css');
     expect(script.headers.get('content-type')).toContain('text/javascript');
+    expect(await script.text()).toContain("input: { city: 'Bangalore' }");
   });
 
   it('keeps the server-side purchase agent disabled by default', async () => {
