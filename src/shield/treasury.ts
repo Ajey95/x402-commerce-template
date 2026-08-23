@@ -18,15 +18,20 @@ export interface PaidResourceClientOptions {
 
 /**
  * Filters a downstream provider's advertised 402 requirements before a transaction is signed.
- * The treasury will pay only the configured Algorand network, configured USDC asset, and exact
- * trusted resource price. Owned demo resources are also pinned to the shield receiver; curated
- * external providers may optionally pin an expected recipient in their ResourceDefinition.
+ * The treasury will pay only the configured Algorand network, configured USDC asset, exact
+ * trusted resource price, and the server-pinned recipient. Owned demo resources use the shield
+ * receiver; every external-curated resource must pin its own valid Algorand payTo address.
  */
 export function createDownstreamPaymentPolicy(
   config: Pick<RuntimeConfig, 'network' | 'usdcAssetId' | 'payTo'>,
   definition: ResourceDefinition,
 ): PaymentPolicy {
   const expectedPayTo = definition.trust === 'owned-demo' ? config.payTo : definition.payTo;
+
+  // Fail closed even if a caller bypasses createResourceRegistry() and supplies a raw
+  // external definition without the recipient pin required by registry validation.
+  if (!expectedPayTo) return () => [];
+
   return (_version, requirements) =>
     requirements.filter(requirement => {
       const avm = requirement as typeof requirement & { asset?: string | number };
@@ -35,7 +40,7 @@ export function createDownstreamPaymentPolicy(
         requirement.network === config.network &&
         String(requirement.amount) === String(definition.priceAtomic) &&
         String(avm.asset ?? '') === String(config.usdcAssetId) &&
-        (!expectedPayTo || requirement.payTo === expectedPayTo)
+        requirement.payTo === expectedPayTo
       );
     });
 }
