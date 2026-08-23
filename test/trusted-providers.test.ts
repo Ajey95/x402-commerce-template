@@ -22,7 +22,46 @@ describe('network-aware curated providers', () => {
           additionalProperties: false,
         },
         responseSchema: expect.objectContaining({
-          required: ['symbol', 'price', 'data_timestamp', 'request_id', 'response_hash', 'signature'],
+          required: [
+            'symbol',
+            'price',
+            'data_timestamp',
+            'request_id',
+            'response_hash',
+            'signature',
+            'provider',
+            'sla_hash',
+            'served_at',
+            'paid_via',
+          ],
+          properties: expect.objectContaining({
+            provider: {
+              type: 'string',
+              maxLength: 58,
+              const: 'T7X54PQA7EXDPIRKNV3PHQFGXILNG7H7LWHFM4PNWDN2AJOFIHLOUX2Q74',
+            },
+            paid_via: {
+              type: 'object',
+              required: ['protocol', 'network', 'asset', 'asset_id', 'amount', 'facilitator'],
+              properties: {
+                protocol: { type: 'string', maxLength: 8, const: 'x402' },
+                network: {
+                  type: 'string',
+                  maxLength: 80,
+                  const: 'algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=',
+                },
+                asset: { type: 'string', maxLength: 8, const: 'USDC' },
+                asset_id: { type: 'number', const: 10_458_941 },
+                amount: { type: 'number', const: 0.001 },
+                facilitator: {
+                  type: 'string',
+                  maxLength: 100,
+                  const: 'https://facilitator.goplausible.xyz',
+                },
+              },
+              additionalProperties: false,
+            },
+          }),
           additionalProperties: false,
         }),
         trust: 'external-curated',

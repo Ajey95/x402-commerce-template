@@ -1,9 +1,10 @@
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'PARTIAL_FAILURE' | 'FAILED';
 
-export interface JsonSchemaProperty {
+export interface JsonPrimitiveSchemaProperty {
   type: 'string' | 'number' | 'boolean';
   maxLength?: number;
   enum?: string[];
+  const?: string | number | boolean;
 }
 
 export interface JsonObjectSchema {
@@ -12,6 +13,8 @@ export interface JsonObjectSchema {
   properties: Record<string, JsonSchemaProperty>;
   additionalProperties: false;
 }
+
+export type JsonSchemaProperty = JsonPrimitiveSchemaProperty | JsonObjectSchema;
 
 export type JsonObject = Record<string, unknown>;
 
