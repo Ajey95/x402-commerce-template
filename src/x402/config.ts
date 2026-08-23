@@ -66,20 +66,22 @@ export function createX402Middleware(config: RuntimeConfig, registry?: ResourceR
   });
 
   const routes: RoutesConfig = {
-      'GET /api/wallet/:address': {
-        accepts: [paymentOption(config, config.price)],
-        description: WALLET_DESCRIPTION,
-        mimeType: 'application/json',
-        extensions: discovery,
-      },
-    };
+    'GET /api/wallet/:address': {
+      accepts: [paymentOption(config, config.price)],
+      description: WALLET_DESCRIPTION,
+      mimeType: 'application/json',
+      extensions: discovery,
+    },
+  };
+
   for (const definition of registry?.values() ?? []) {
+    if (definition.trust !== 'owned-demo') continue;
     routes[`${definition.method} ${definition.path}`] = {
       accepts: [paymentOption(config, `$${(definition.priceAtomic / 1_000_000).toFixed(6)}`)],
-      description: `${definition.id} demo data. SIMULATED CONTENT / REAL TESTNET PAYMENT.`,
+      description: `${definition.description} SIMULATED CONTENT / REAL TESTNET PAYMENT.`,
       mimeType: 'application/json',
       serviceName: 'cpmm-shield downstream demo resources',
-      tags: ['cpmm-shield', 'algorand', 'x402', 'simulated-content'],
+      tags: definition.tags,
     };
   }
   return paymentMiddleware(routes, server);
@@ -92,16 +94,19 @@ export function createShieldHttpServer(config: RuntimeConfig, quotes: QuoteServi
       resources: [
         {
           id: 'weather',
-          url: `${config.shield.baseUrl}/api/resources/weather`,
+          input: { city: 'Bangalore' },
           maxPayment: 3000,
-          expectedSchema: { type: 'object', required: ['temperature', 'condition'] },
+          required: true,
         },
       ],
     },
     inputSchema: {
       properties: {
         requestId: { type: 'string', description: 'Unique idempotency key for this shield job' },
-        resources: { type: 'array', description: 'Allowlisted paid resources to orchestrate' },
+        resources: {
+          type: 'array',
+          description: 'Trusted resource IDs with provider-specific input, caller payment ceilings, and required flags',
+        },
       },
       required: ['requestId', 'resources'],
     },
@@ -129,10 +134,10 @@ export function createShieldHttpServer(config: RuntimeConfig, quotes: QuoteServi
       ],
       resource: `${config.shield.baseUrl}/api/shield/execute`,
       description:
-        'CPMM-SHIELD accepts one x402 payment, pays allowlisted resources from an isolated treasury, validates responses, and returns a signed aggregate receipt.',
+        'CPMM-SHIELD accepts one x402 payment, selects only server-trusted providers, pays them from an isolated treasury, validates responses, and returns a signed aggregate receipt.',
       mimeType: 'application/json',
       serviceName: 'cpmm-shield',
-      tags: ['cpmm-shield', 'agentic-commerce', 'algorand', 'x402'],
+      tags: ['cpmm-shield', 'agentic-commerce', 'payment-firewall', 'algorand', 'x402'],
       unpaidResponseBody: context => quotes.unpaidBody(context),
       extensions: discovery,
     },

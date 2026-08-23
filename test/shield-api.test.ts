@@ -11,10 +11,9 @@ const shieldRequest = {
   resources: [
     {
       id: 'weather',
-      url: `${testConfig.shield.baseUrl}/api/resources/weather`,
+      input: { city: 'Bangalore' },
       maxPayment: 3_000,
       required: true,
-      expectedSchema: { type: 'object', required: ['temperature', 'condition'] },
     },
   ],
 };
@@ -131,17 +130,21 @@ describe('CPMM-SHIELD API', () => {
       app.request('/health'),
       app.request('/api/shield/resources'),
     ]);
-    await expect(health.json()).resolves.toMatchObject({ status: 'ok', service: 'cpmm-shield' });
+    await expect(health.json()).resolves.toMatchObject({
+      status: 'ok',
+      service: 'cpmm-shield',
+      challengeMode: false,
+    });
     await expect(resources.json()).resolves.toMatchObject({
       resources: [
-        { id: 'weather', priceAtomic: 2_000 },
-        { id: 'company-lookup', priceAtomic: 3_000 },
-        { id: 'sentiment-score', priceAtomic: 2_000 },
+        { id: 'weather', trust: 'owned-demo', priceAtomic: 2_000 },
+        { id: 'company-lookup', trust: 'owned-demo', priceAtomic: 3_000 },
+        { id: 'sentiment-score', trust: 'owned-demo', priceAtomic: 2_000 },
       ],
     });
   });
 
-  it('rejects malformed and disallowed jobs before generating a payment challenge', async () => {
+  it('rejects malformed and untrusted jobs before generating a payment challenge', async () => {
     const app = createApp(testConfig);
     const malformed = await app.request('/api/shield/execute', {
       method: 'POST',
@@ -149,17 +152,51 @@ describe('CPMM-SHIELD API', () => {
       body: '{bad',
     });
     expect(malformed.status).toBe(400);
+    expect(malformed.headers.get('payment-required')).toBeNull();
 
-    const disallowed = await app.request('/api/shield/execute', {
+    const untrusted = await app.request('/api/shield/execute', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         ...shieldRequest,
-        resources: [{ ...shieldRequest.resources[0], url: 'http://127.0.0.1/admin' }],
+        resources: [{ ...shieldRequest.resources[0], id: 'attacker-api' }],
       }),
     });
-    expect(disallowed.status).toBe(400);
-    await expect(disallowed.json()).resolves.toMatchObject({ error: 'resource_url_not_allowed' });
+    expect(untrusted.status).toBe(400);
+    expect(untrusted.headers.get('payment-required')).toBeNull();
+    await expect(untrusted.json()).resolves.toMatchObject({ error: 'resource_not_allowed' });
+  });
+
+  it('rejects invalid provider input before generating a payment challenge', async () => {
+    const response = await createApp(testConfig).request('/api/shield/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...shieldRequest,
+        resources: [{ ...shieldRequest.resources[0], input: { city: 'Bangalore', url: 'https://evil.test' } }],
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(response.headers.get('payment-required')).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_resource_input' });
+  });
+
+  it('rejects legacy client-controlled URL and schema fields', async () => {
+    const response = await createApp(testConfig).request('/api/shield/execute', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...shieldRequest,
+        resources: [{
+          ...shieldRequest.resources[0],
+          url: 'https://attacker.example/pay',
+          expectedSchema: { type: 'object' },
+        }],
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(response.headers.get('payment-required')).toBeNull();
+    await expect(response.json()).resolves.toMatchObject({ error: 'invalid_request' });
   });
 
   it('returns an official x402 challenge with the computed dynamic price', async () => {

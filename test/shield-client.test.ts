@@ -1,9 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
-import { requestShieldJob, type ShieldPayer } from '../client/shield-client.js';
+import { createDemoShieldRequest, requestShieldJob, type ShieldPayer } from '../client/shield-client.js';
 
-const request = { requestId: 'job_client', resources: [] };
+const request = {
+  requestId: 'job_client',
+  resources: [{ id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3_000, required: true }],
+};
 
 describe('shield client', () => {
+  it('builds the deterministic demo without client-controlled provider URLs or schemas', () => {
+    const demo = createDemoShieldRequest('https://shield.test', 'job_demo');
+    expect(demo).toEqual({
+      requestId: 'job_demo',
+      resources: [
+        { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3_000, required: true },
+        { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3_000, required: true },
+        {
+          id: 'sentiment-score',
+          input: { text: 'Algorand enables secure, scalable agentic payments.' },
+          maxPayment: 3_000,
+          required: true,
+        },
+      ],
+    });
+    expect(JSON.stringify(demo)).not.toContain('expectedSchema');
+    expect(JSON.stringify(demo)).not.toContain('/api/resources/');
+  });
+
   it('requires a 402 quote, a successful paid response, and confirmed settlement', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(
       Response.json({ error: 'payment_required', quote: { quotedPriceAtomic: 4_000 } }, { status: 402 }),

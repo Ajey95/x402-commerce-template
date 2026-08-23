@@ -1,61 +1,115 @@
-# Implementation Map
+# CPMM-SHIELD Implementation Map
 
-Use this map when a participant asks "where do I change the template?"
+Use this map when asking where a behavior lives or when a coding agent needs to change the project safely.
 
-## Client Side
-
-| Need | Files |
-| --- | --- |
-| Unpaid challenge demo | `client/unpaid-client.ts` |
-| Paid buyer flow | `client/paid-client.ts` |
-| Autonomous buyer flow | `client/agent-client.ts` |
-| Shared buyer helpers | `client/lib.ts`, `sdk/extensions.ts` |
-| Browser payment demo | `src/web/page.ts`, `src/web/app-script.ts`, `src/web/styles.ts` |
-
-## Server Side
+## Agent knowledge
 
 | Need | Files |
 | --- | --- |
-| App routes and middleware order | `src/app.ts` |
-| Runtime env validation | `src/config.ts` |
-| Paid business logic | `src/routes/wallet.ts` or a new route module |
-| Local one-click demo agent | `src/routes/demo.ts` |
+| Project-specific agent invariants | `AGENTS.md` |
+| Compact coding workflows | `skills.md` |
+| CPMM-SHIELD local skill | `skills/cpmm-shield-x402/SKILL.md` |
+| VibeKit / canonical Algorand x402 guidance | `docs/resources/VIBEKIT_X402_AGENT_GUIDE.md` |
+| Organizer-provided resources | `docs/resources/HACKCULTURE_RESOURCES.md` |
+| Approved architecture | `docs/superpowers/specs/2026-08-23-cpmm-shield-complete-design.md` |
+
+## Public shield request boundary
+
+| Need | Files |
+| --- | --- |
+| Request/domain types | `src/shield/types.ts` |
+| Strict JSON request parsing | `src/shield/request.ts` |
+| Provider-specific input schema validation | `src/shield/input-validator.ts` |
+| Trusted provider definitions | `src/shield/registry.ts` |
+| Resource count and spending policy | `src/shield/policy.ts` |
+| Quote creation / request hashing | `src/shield/quote.ts`, `src/shield/binding.ts` |
+
+The public request is intentionally limited to `{ requestId, resources: [{ id, input, maxPayment, required }] }`. Provider URLs, response schemas, recipients, network, and asset remain server controlled.
+
+## Settlement and orchestration
+
+| Need | Files |
+| --- | --- |
+| Upstream settlement-first middleware | `src/shield/payment-manager.ts` |
+| In-memory job/replay state | `src/shield/jobs.ts` |
+| Audit trail | `src/shield/audit.ts` |
+| Orchestration and terminal status | `src/shield/orchestrator.ts` |
+| Ed25519 aggregate receipt | `src/shield/receipt.ts` |
+
+## Trusted downstream providers
+
+| Need | Files |
+| --- | --- |
+| Provider registry | `src/shield/registry.ts` |
+| Trusted URL/query/body construction | `src/shield/provider-request.ts` |
+| Isolated treasury x402 payer | `src/shield/treasury.ts` |
+| Resource-client error model | `src/shield/resource-client.ts` |
+| Response firewall | `src/shield/validator.ts` |
+| Owned deterministic demo resources | `src/routes/resources.ts` |
+
+`owned-demo` resources are hosted by this service. `external-curated` resources are independently hosted and must be explicitly trusted. Bazaar discovery alone never authorizes treasury spending.
+
+## HTTP routes
+
+| Need | Files |
+| --- | --- |
+| App composition / middleware order | `src/app.ts` |
+| Shield API and public metadata | `src/routes/shield.ts` |
+| Browser server-side TestNet demo payer | `src/routes/shield-demo.ts` |
+| Legacy wallet example | `src/routes/wallet.ts`, `src/routes/demo.ts` |
 | Server start | `src/server.ts` |
 
-## x402 And Facilitator
+## x402 and facilitator
 
 | Need | Files |
 | --- | --- |
-| Protected route registration | `src/x402/config.ts` |
-| Price, network, asset, receiver | `.env`, `src/config.ts`, `src/x402/config.ts` |
-| GoPlausible facilitator URL | `FACILITATOR_URL` |
-| Client signer wiring | `src/x402/client.ts` |
+| Protected route + Bazaar registration | `src/x402/config.ts` |
+| AVM paying client | `src/x402/client.ts` |
+| Network, USDC, receiver and facilitator config | `src/config.ts`, `.env`, `.env.example` |
+| GoPlausible explanation | `docs/resources/GOPLAUSIBLE_FACILITATOR.md` |
+| Bazaar explanation | `docs/resources/BAZAAR_DISCOVERY.md` |
 | Payment inspection CLI | `scripts/x402-cli.ts` |
 
-## Discovery
+## Clients and AI agent
 
 | Need | Files |
 | --- | --- |
-| Bazaar resource metadata | `src/x402/config.ts` |
-| Programmatic discovery client | `client/agent-client.ts` |
-| Discovery explanation | `docs/resources/BAZAAR_DISCOVERY.md` |
+| Shield paying-client lifecycle | `client/shield-client.ts` |
+| Deterministic three-resource demo | `client/scripted-shield-client.ts` |
+| Bounded OpenAI tool-calling agent | `client/agent-client.ts` |
+| Model availability fallback | `client/openai-model.ts` |
+| Shared payer helpers | `client/lib.ts` |
 
-## Extras
+The AI agent may choose only trusted resource IDs and bounded inputs. It does not receive treasury credentials or arbitrary payment infrastructure controls.
 
-| Component | Files |
+## Dashboard
+
+| Need | Files |
 | --- | --- |
-| Smart contract templates | `contracts/templates/` |
-| x402 CLI | `scripts/x402-cli.ts` |
-| Agent testing sandbox | `scripts/agent-sandbox.ts` |
-| Payment flow simulator | `scripts/payment-flow-simulator.ts` |
-| SDK extensions | `sdk/extensions.ts` |
+| Judge-facing HTML | `src/web/page.ts` |
+| Browser request/receipt/audit behavior | `src/web/app-script.ts` |
+| Presentation styling | `src/web/styles.ts` |
 
-## Safe Customization Order
+## Verification
 
-1. Update `PROJECT_BRIEF.md`.
-2. Change paid resource logic.
-3. Change route validation before x402.
-4. Change `src/x402/config.ts`.
-5. Change clients and dashboard.
-6. Change tests.
-7. Run build, tests, smoke, simulator, and paid TestNet flow.
+| Need | Files |
+| --- | --- |
+| Unit/integration tests | `test/` |
+| Provider adapter tests | `test/provider-request.test.ts` |
+| Structural/live smoke | `scripts/smoke.ts` |
+| No-funds simulation | `scripts/payment-flow-simulator.ts` |
+| Agent sandbox | `scripts/agent-sandbox.ts` |
+| GitHub CI | `.github/workflows/ci.yml` |
+
+## Safe customization order
+
+1. Read `AGENTS.md` and the approved design.
+2. Update `PROJECT_BRIEF.md` if product scope changes.
+3. Add/change trusted provider metadata and exact schemas.
+4. Add pre-payment provider-input policy tests.
+5. Add trusted request adapter + treasury tests.
+6. Change orchestration/response validation only if necessary.
+7. Update x402/Bazaar metadata when the public contract changes.
+8. Update bounded clients/agent and dashboard.
+9. Update documentation.
+10. Run build, tests, smoke, simulator, x402 inspection/checklist, and live TestNet acceptance only when funded disposable credentials are available.
