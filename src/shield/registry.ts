@@ -2,6 +2,14 @@ import type { ResourceDefinition } from './types.js';
 
 export type ResourceRegistry = ReadonlyMap<string, ResourceDefinition>;
 
+function isPrivateHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (normalized === 'localhost' || normalized === '::1' || normalized === '0.0.0.0') return true;
+  if (/^127\./.test(normalized) || /^10\./.test(normalized) || /^192\.168\./.test(normalized)) return true;
+  const match = /^172\.(\d+)\./.exec(normalized);
+  return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
+}
+
 function assertDefinition(definition: ResourceDefinition): void {
   const origin = new URL(definition.origin);
   if (origin.protocol !== 'http:' && origin.protocol !== 'https:') {
@@ -10,11 +18,25 @@ function assertDefinition(definition: ResourceDefinition): void {
   if (origin.username || origin.password) {
     throw new Error(`Resource ${definition.id} origin must not contain credentials.`);
   }
+  if (definition.trust === 'external-curated') {
+    if (origin.protocol !== 'https:') {
+      throw new Error(`External resource ${definition.id} must use HTTPS.`);
+    }
+    if (isPrivateHostname(origin.hostname)) {
+      throw new Error(`External resource ${definition.id} must not target a private-network hostname.`);
+    }
+  }
   if (!definition.path.startsWith('/')) {
     throw new Error(`Resource ${definition.id} path must start with '/'.`);
   }
   if (!Number.isSafeInteger(definition.priceAtomic) || definition.priceAtomic < 0) {
     throw new Error(`Resource ${definition.id} priceAtomic must be a non-negative safe integer.`);
+  }
+  if (
+    definition.maxPriceAtomic !== undefined &&
+    (!Number.isSafeInteger(definition.maxPriceAtomic) || definition.maxPriceAtomic < definition.priceAtomic)
+  ) {
+    throw new Error(`Resource ${definition.id} maxPriceAtomic must be a safe integer at least priceAtomic.`);
   }
 }
 
