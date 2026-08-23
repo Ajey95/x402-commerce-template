@@ -84,7 +84,9 @@ async function main() {
     name: 'requestShieldJob',
     description:
       'Buy one bounded CPMM-SHIELD job using only trusted resources. Never invent provider URLs, recipients, schemas, networks, or assets.',
-    strict: true,
+    // Provider-specific inputs intentionally use a non-strict function schema; the shield's exact
+    // server-side schemas are the security boundary and reject wrong/extra input before payment.
+    strict: false,
     parameters: {
       type: 'object',
       properties: {
@@ -103,7 +105,6 @@ async function main() {
                   name: { type: 'string' },
                   text: { type: 'string' },
                 },
-                required: [],
                 additionalProperties: false,
               },
               maxPayment: { type: 'integer', minimum: 0, maximum: 10000 },
