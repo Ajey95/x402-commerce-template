@@ -2,7 +2,8 @@ import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { createPayingClient, explainPaymentError } from './lib.js';
 import { selectAvailableModel } from './openai-model.js';
-import { createDemoShieldRequest, requestShieldJobWithProof } from './shield-client.js';
+import { requestShieldJobWithProof } from './shield-client.js';
+import type { ExecuteShieldRequest } from '../src/shield/types.js';
 
 interface OpenAIItem {
   type: string;
@@ -16,6 +17,13 @@ interface OpenAIResponse {
   id: string;
   output: OpenAIItem[];
   output_text?: string;
+}
+
+interface AgentResource {
+  id: 'weather' | 'company-lookup' | 'sentiment-score';
+  input: { city?: string; name?: string; text?: string };
+  maxPayment: number;
+  required: boolean;
 }
 
 async function openai(path: string, apiKey: string, init?: RequestInit): Promise<Record<string, unknown>> {
@@ -44,6 +52,18 @@ function responseText(response: OpenAIResponse): string {
   return response.output.flatMap(item => item.content ?? []).map(part => part.text ?? '').join('\n').trim();
 }
 
+function toShieldRequest(resources: AgentResource[]): ExecuteShieldRequest {
+  return {
+    requestId: `job_${randomUUID().replaceAll('-', '').slice(0, 16)}`,
+    resources: resources.map(resource => ({
+      id: resource.id,
+      input: resource.input,
+      maxPayment: resource.maxPayment,
+      required: resource.required,
+    })),
+  };
+}
+
 async function main() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error('OPENAI_API_KEY is required for the tool-calling client.');
@@ -62,36 +82,70 @@ async function main() {
   const tools = [{
     type: 'function',
     name: 'requestShieldJob',
-    description: 'Submit and pay one CPMM-SHIELD job that aggregates weather, company lookup, and sentiment resources into a signed receipt.',
+    description:
+      'Buy one bounded CPMM-SHIELD job using only trusted resources. Never invent provider URLs, recipients, schemas, networks, or assets.',
     strict: true,
     parameters: {
       type: 'object',
-      properties: { description: { type: 'string', description: 'The natural-language research goal to execute.' } },
-      required: ['description'],
+      properties: {
+        resources: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 3,
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', enum: ['weather', 'company-lookup', 'sentiment-score'] },
+              input: {
+                type: 'object',
+                properties: {
+                  city: { type: 'string' },
+                  name: { type: 'string' },
+                  text: { type: 'string' },
+                },
+                required: [],
+                additionalProperties: false,
+              },
+              maxPayment: { type: 'integer', minimum: 0, maximum: 10000 },
+              required: { type: 'boolean' },
+            },
+            required: ['id', 'input', 'maxPayment', 'required'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['resources'],
       additionalProperties: false,
     },
   }];
+
   const first = (await openai('/responses', apiKey, {
     method: 'POST',
     body: JSON.stringify({
       model,
-      instructions: 'You are a commerce agent. Use requestShieldJob exactly once to satisfy the user, then summarize only the validated receipt.',
+      instructions:
+        'You are a commerce agent using CPMM-SHIELD as a payment firewall. Use requestShieldJob at most once. Choose only listed trusted resource IDs. Weather input is {city}; company-lookup input is {name}; sentiment-score input is {text}. Never invent URLs, payment recipients, schemas, networks, assets, or wallet credentials. After the tool result, summarize only validated results from the signed receipt.',
       input: goal,
       tools,
       tool_choice: 'auto',
     }),
   })) as unknown as OpenAIResponse;
+
   const call = first.output.find(item => item.type === 'function_call' && item.name === 'requestShieldJob');
   if (!call?.call_id) throw new Error('The model did not call requestShieldJob.');
-  const args = JSON.parse(call.arguments ?? '{}') as { description?: string };
-  console.log(`Agent tool call: ${args.description ?? goal}`);
+  const args = JSON.parse(call.arguments ?? '{}') as { resources?: AgentResource[] };
+  if (!Array.isArray(args.resources) || args.resources.length < 1) {
+    throw new Error('The model returned an empty shield resource request.');
+  }
+  console.log(`Agent requested trusted resources: ${args.resources.map(resource => resource.id).join(', ')}`);
 
   const payer = createPayingClient();
-  const request = createDemoShieldRequest(baseUrl, `job_${randomUUID().replaceAll('-', '').slice(0, 16)}`);
+  const request = toShieldRequest(args.resources);
   const proof = await requestShieldJobWithProof(baseUrl, request, {
     fetchWithPayment: payer.fetchWithPayment,
     readSettlement: response => payer.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
   });
+
   const final = (await openai('/responses', apiKey, {
     method: 'POST',
     body: JSON.stringify({
@@ -101,10 +155,11 @@ async function main() {
       input: [{
         type: 'function_call_output',
         call_id: call.call_id,
-        output: JSON.stringify({ description: args.description, transaction: proof.transaction, receipt: proof.receipt }),
+        output: JSON.stringify({ transaction: proof.transaction, receipt: proof.receipt }),
       }],
     }),
   })) as unknown as OpenAIResponse;
+
   console.log('\nAgent result');
   console.log(responseText(final) || JSON.stringify(proof.receipt, null, 2));
 }
