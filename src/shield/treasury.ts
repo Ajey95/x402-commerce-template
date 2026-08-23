@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '../config.js';
 import { createAvmPayingClient } from '../x402/client.js';
+import { buildProviderRequest } from './provider-request.js';
 import { ResourceCallError, type ResourceCallResult, type ResourceClient } from './resource-client.js';
 import type { ResourceDefinition, RequestedResource } from './types.js';
 
@@ -14,30 +15,6 @@ export interface PaidResourceClientOptions {
   maxResponseBytes: number;
 }
 
-function callUrl(request: RequestedResource, definition: ResourceDefinition): string {
-  const url = new URL(request.url);
-  if (definition.id === 'weather') url.searchParams.set('city', 'Bangalore');
-  if (definition.id === 'company-lookup') url.searchParams.set('name', 'Algorand Foundation');
-  return url.toString();
-}
-
-function requestInit(definition: ResourceDefinition, timeoutMs: number): RequestInit {
-  const base: RequestInit = {
-    method: definition.method,
-    redirect: 'manual',
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { accept: 'application/json' },
-  };
-  if (definition.method === 'POST') {
-    return {
-      ...base,
-      headers: { ...base.headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'Algorand enables secure, scalable agentic payments.' }),
-    };
-  }
-  return base;
-}
-
 export function createPaidResourceClient(
   payer: PaidFetchClient,
   options: PaidResourceClientOptions,
@@ -49,12 +26,10 @@ export function createPaidResourceClient(
       _jobId?: string,
     ): Promise<ResourceCallResult> {
       const started = Date.now();
+      const built = buildProviderRequest(request, definition, options.timeoutMs);
       let response: Response;
       try {
-        response = await payer.fetchWithPayment(
-          callUrl(request, definition),
-          requestInit(definition, options.timeoutMs),
-        );
+        response = await payer.fetchWithPayment(built.url, built.init);
       } catch (error) {
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
         throw new ResourceCallError(
@@ -100,20 +75,24 @@ export function createPaidResourceClient(
       if (!contentType.toLowerCase().includes('application/json')) {
         throw new ResourceCallError('invalid_content_type', 'Downstream response must be JSON.', settled);
       }
+
+      const maxResponseBytes = definition.maxResponseBytes ?? options.maxResponseBytes;
       const declaredLength = Number(response.headers.get('content-length') ?? 0);
-      if (declaredLength > options.maxResponseBytes) {
+      if (declaredLength > maxResponseBytes) {
         throw new ResourceCallError('response_too_large', 'Downstream response exceeds the size limit.', settled);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength > options.maxResponseBytes) {
+      if (bytes.byteLength > maxResponseBytes) {
         throw new ResourceCallError('response_too_large', 'Downstream response exceeds the size limit.', settled);
       }
+
       let data: unknown;
       try {
         data = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
         throw new ResourceCallError('invalid_json', 'Downstream returned malformed JSON.', settled);
       }
+
       return {
         status: response.status,
         transaction: settlement.transaction,
@@ -147,4 +126,3 @@ export function createTreasuryResourceClient(
     }),
   };
 }
-
