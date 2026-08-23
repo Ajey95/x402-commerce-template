@@ -1,19 +1,27 @@
 import type { ExecuteShieldRequest, ShieldReceipt } from '../src/shield/types.js';
 
-export function createDemoShieldRequest(baseUrl: string, requestId: string): ExecuteShieldRequest {
-  const root = baseUrl.replace(/\/$/, '');
-  const expectedSchema = (required: string[]) => ({
-    type: 'object' as const,
-    required,
-    properties: {},
-    additionalProperties: false as const,
-  });
+export function createDemoShieldRequest(_baseUrl: string, requestId: string): ExecuteShieldRequest {
   return {
     requestId,
     resources: [
-      { id: 'weather', url: `${root}/api/resources/weather`, maxPayment: 3_000, required: true, expectedSchema: expectedSchema(['temperature', 'condition']) },
-      { id: 'company-lookup', url: `${root}/api/resources/company-lookup`, maxPayment: 3_000, required: true, expectedSchema: expectedSchema(['name', 'founded']) },
-      { id: 'sentiment-score', url: `${root}/api/resources/sentiment-score`, maxPayment: 3_000, required: true, expectedSchema: expectedSchema(['score', 'label']) },
+      {
+        id: 'weather',
+        input: { city: 'Bangalore' },
+        maxPayment: 3_000,
+        required: true,
+      },
+      {
+        id: 'company-lookup',
+        input: { name: 'Algorand Foundation' },
+        maxPayment: 3_000,
+        required: true,
+      },
+      {
+        id: 'sentiment-score',
+        input: { text: 'Algorand enables secure, scalable agentic payments.' },
+        maxPayment: 3_000,
+        required: true,
+      },
     ],
   };
 }
