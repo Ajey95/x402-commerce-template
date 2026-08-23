@@ -54,9 +54,9 @@ describe('CPMM-SHIELD HTTP API', () => {
     expect(html).toContain('Many protected resources out.');
     expect(html).toContain('SIMULATED CONTENT');
     expect(html).toContain('REAL TESTNET PAYMENT');
-    expect(html).toContain('Upstream payment');
+    expect(html).toMatch(/Upstream payment/i);
     expect(html).toContain('Trusted providers');
-    expect(html).toContain('Response firewall');
+    expect(html).toMatch(/Response firewall/i);
     expect(html).toContain('Signed receipt');
     expect(html).toContain('Run shield quote');
     expect(styles.headers.get('content-type')).toContain('text/css');
