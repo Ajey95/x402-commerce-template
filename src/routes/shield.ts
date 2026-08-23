@@ -9,7 +9,7 @@ import type { ResourceRegistry } from '../shield/registry.js';
 
 export function createShieldValidationMiddleware(
   quotes: QuoteService,
-  store: InMemoryJobStore,
+  _store: InMemoryJobStore,
 ): MiddlewareHandler {
   return async (c, next) => {
     try {
@@ -37,11 +37,17 @@ export function registerShieldPublicRoutes(
     c.json({
       resources: [...registry.values()].map(resource => ({
         id: resource.id,
+        name: resource.name,
         method: resource.method,
+        origin: resource.origin,
         path: resource.path,
         priceAtomic: resource.priceAtomic,
-        content: 'SIMULATED CONTENT',
-        payment: 'REAL TESTNET PAYMENT',
+        trust: resource.trust,
+        description: resource.description,
+        tags: resource.tags,
+        inputSchema: resource.inputSchema,
+        content: resource.trust === 'owned-demo' ? 'SIMULATED CONTENT' : 'PROVIDER CONTENT',
+        payment: 'REAL X402 PAYMENT',
       })),
     }),
   );
@@ -77,4 +83,3 @@ export function registerShieldExecuteRoute(app: Hono, orchestrator: ShieldOrches
     }
   });
 }
-
