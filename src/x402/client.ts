@@ -5,13 +5,23 @@ import {
   ExactAvmScheme,
   toClientAvmSigner,
 } from '@x402/avm';
-import { wrapFetchWithPayment, x402Client, x402HTTPClient } from '@x402/fetch';
+import {
+  wrapFetchWithPayment,
+  x402Client,
+  x402HTTPClient,
+  type PaymentPolicy,
+} from '@x402/fetch';
 import type { AlgorandNetwork } from '../config.js';
+
+export interface AvmPayingClientOptions {
+  paymentPolicies?: PaymentPolicy[];
+}
 
 export function createAvmPayingClient(
   mnemonic: string,
   networkName: AlgorandNetwork,
   fetchImpl: typeof fetch = fetch,
+  options: AvmPayingClientOptions = {},
 ) {
   let account: algosdk.Account;
   try {
@@ -25,6 +35,7 @@ export function createAvmPayingClient(
   const signer = toClientAvmSigner(Buffer.from(account.sk).toString('base64'));
   const client = new x402Client();
   client.register(network, new ExactAvmScheme(signer));
+  for (const policy of options.paymentPolicies ?? []) client.registerPolicy(policy);
 
   return {
     signer,
