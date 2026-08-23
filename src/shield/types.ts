@@ -46,6 +46,8 @@ export interface ResourceDefinition {
   path: string;
   priceAtomic: number;
   maxPriceAtomic?: number;
+  /** Optional expected provider recipient. Owned demo providers use the shield PAY_TO_ADDRESS. */
+  payTo?: string;
   inputSchema: JsonObjectSchema;
   responseSchema: JsonObjectSchema;
   trust: 'owned-demo' | 'external-curated';
