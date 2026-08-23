@@ -18,9 +18,10 @@ import { ShieldOrchestrator } from './shield/orchestrator.js';
 import { createSettlementFirstMiddleware, type ShieldHttpServer } from './shield/payment-manager.js';
 import { QuoteService } from './shield/quote.js';
 import { createReceiptSigner, createReceiptSignerFromMnemonic, type ReceiptSigner } from './shield/receipt.js';
-import { createResourceRegistry } from './shield/registry.js';
+import { createResourceRegistry, type ResourceRegistry } from './shield/registry.js';
 import { ResourceCallError, type ResourceClient } from './shield/resource-client.js';
 import { createTreasuryResourceClient } from './shield/treasury.js';
+import { TRUSTED_EXTERNAL_PROVIDERS } from './shield/trusted-providers.js';
 import { APP_SCRIPT } from './web/app-script.js';
 import { renderPage } from './web/page.js';
 import { STYLES } from './web/styles.js';
@@ -32,6 +33,7 @@ export interface AppOptions {
   audit?: AuditLog;
   resourceClient?: ResourceClient;
   receiptSigner?: ReceiptSigner;
+  registry?: ResourceRegistry;
   bindingSecret?: string;
   shieldHttpServer?: ShieldHttpServer;
   now?: () => number;
@@ -62,7 +64,7 @@ export function createApp(config: RuntimeConfig, options: AppOptions = {}) {
   const algorand = new AlgorandService(config.indexerUrl, Number(config.usdcAssetId), options.fetchImpl);
   const store = options.store ?? new InMemoryJobStore();
   const audit = options.audit ?? new AuditLog();
-  const registry = createResourceRegistry(config.shield.baseUrl);
+  const registry = options.registry ?? createResourceRegistry(config.shield.baseUrl, TRUSTED_EXTERNAL_PROVIDERS);
   const quotes = new QuoteService({
     config: config.shield,
     registry,
@@ -102,6 +104,8 @@ export function createApp(config: RuntimeConfig, options: AppOptions = {}) {
       status: 'ok',
       service: 'cpmm-shield',
       network: config.network,
+      challengeMode: config.challengeMode,
+      facilitatorUrl: config.facilitatorUrl,
       treasuryReady: Boolean(config.treasuryMnemonic || options.resourceClient),
       demoReady: config.demoMode && Boolean(config.demoMnemonic && config.treasuryMnemonic),
       treasuryAddress: treasury.address,
@@ -112,7 +116,7 @@ export function createApp(config: RuntimeConfig, options: AppOptions = {}) {
   app.post('/demo/purchase', createDemoPurchaseHandler(config));
   app.post('/demo/shield', createShieldDemoHandler(config));
 
-  // Parse, validate, budget, allowlist, and bind the job before a payment challenge can be emitted.
+  // Parse, validate, budget, and bind the trusted job before a payment challenge can be emitted.
   app.use('/api/shield/execute', createShieldValidationMiddleware(quotes, store));
   app.use(
     '/api/shield/execute',

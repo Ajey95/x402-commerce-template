@@ -1,5 +1,7 @@
+import type { PaymentPolicy } from '@x402/fetch';
 import type { RuntimeConfig } from '../config.js';
 import { createAvmPayingClient } from '../x402/client.js';
+import { buildProviderRequest } from './provider-request.js';
 import { ResourceCallError, type ResourceCallResult, type ResourceClient } from './resource-client.js';
 import type { ResourceDefinition, RequestedResource } from './types.js';
 
@@ -14,28 +16,33 @@ export interface PaidResourceClientOptions {
   maxResponseBytes: number;
 }
 
-function callUrl(request: RequestedResource, definition: ResourceDefinition): string {
-  const url = new URL(request.url);
-  if (definition.id === 'weather') url.searchParams.set('city', 'Bangalore');
-  if (definition.id === 'company-lookup') url.searchParams.set('name', 'Algorand Foundation');
-  return url.toString();
-}
+/**
+ * Filters a downstream provider's advertised 402 requirements before a transaction is signed.
+ * The treasury will pay only the configured Algorand network, configured USDC asset, exact
+ * trusted resource price, and the server-pinned recipient. Owned demo resources use the shield
+ * receiver; every external-curated resource must pin its own valid Algorand payTo address.
+ */
+export function createDownstreamPaymentPolicy(
+  config: Pick<RuntimeConfig, 'network' | 'usdcAssetId' | 'payTo'>,
+  definition: ResourceDefinition,
+): PaymentPolicy {
+  const expectedPayTo = definition.trust === 'owned-demo' ? config.payTo : definition.payTo;
 
-function requestInit(definition: ResourceDefinition, timeoutMs: number): RequestInit {
-  const base: RequestInit = {
-    method: definition.method,
-    redirect: 'manual',
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { accept: 'application/json' },
-  };
-  if (definition.method === 'POST') {
-    return {
-      ...base,
-      headers: { ...base.headers, 'content-type': 'application/json' },
-      body: JSON.stringify({ text: 'Algorand enables secure, scalable agentic payments.' }),
-    };
-  }
-  return base;
+  // Fail closed even if a caller bypasses createResourceRegistry() and supplies a raw
+  // external definition without the recipient pin required by registry validation.
+  if (!expectedPayTo) return () => [];
+
+  return (_version, requirements) =>
+    requirements.filter(requirement => {
+      const avm = requirement as typeof requirement & { asset?: string | number };
+      return (
+        requirement.scheme === 'exact' &&
+        requirement.network === config.network &&
+        String(requirement.amount) === String(definition.priceAtomic) &&
+        String(avm.asset ?? '') === String(config.usdcAssetId) &&
+        requirement.payTo === expectedPayTo
+      );
+    });
 }
 
 export function createPaidResourceClient(
@@ -49,17 +56,21 @@ export function createPaidResourceClient(
       _jobId?: string,
     ): Promise<ResourceCallResult> {
       const started = Date.now();
+      const built = buildProviderRequest(request, definition, options.timeoutMs);
       let response: Response;
       try {
-        response = await payer.fetchWithPayment(
-          callUrl(request, definition),
-          requestInit(definition, options.timeoutMs),
-        );
+        response = await payer.fetchWithPayment(built.url, built.init);
       } catch (error) {
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        const paymentRejected = !timedOut && (message.includes('payment') || message.includes('requirement'));
         throw new ResourceCallError(
-          timedOut ? 'downstream_timeout' : 'downstream_unavailable',
-          timedOut ? 'The downstream resource timed out.' : 'The downstream resource could not be reached.',
+          timedOut ? 'downstream_timeout' : paymentRejected ? 'downstream_payment_rejected' : 'downstream_unavailable',
+          timedOut
+            ? 'The downstream resource timed out.'
+            : paymentRejected
+              ? 'The downstream payment challenge did not match trusted policy.'
+              : 'The downstream resource could not be reached.',
           { paymentStatus: 'failed', durationMs: Date.now() - started },
         );
       }
@@ -100,20 +111,24 @@ export function createPaidResourceClient(
       if (!contentType.toLowerCase().includes('application/json')) {
         throw new ResourceCallError('invalid_content_type', 'Downstream response must be JSON.', settled);
       }
+
+      const maxResponseBytes = definition.maxResponseBytes ?? options.maxResponseBytes;
       const declaredLength = Number(response.headers.get('content-length') ?? 0);
-      if (declaredLength > options.maxResponseBytes) {
+      if (declaredLength > maxResponseBytes) {
         throw new ResourceCallError('response_too_large', 'Downstream response exceeds the size limit.', settled);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      if (bytes.byteLength > options.maxResponseBytes) {
+      if (bytes.byteLength > maxResponseBytes) {
         throw new ResourceCallError('response_too_large', 'Downstream response exceeds the size limit.', settled);
       }
+
       let data: unknown;
       try {
         data = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
         throw new ResourceCallError('invalid_json', 'Downstream returned malformed JSON.', settled);
       }
+
       return {
         status: response.status,
         transaction: settlement.transaction,
@@ -132,19 +147,29 @@ export function createTreasuryResourceClient(
   if (!config.treasuryMnemonic) {
     throw new Error('TREASURY_MNEMONIC is required to pay downstream x402 resources.');
   }
-  const payingClient = createAvmPayingClient(config.treasuryMnemonic, config.networkName, fetchImpl);
-  const payer: PaidFetchClient = {
-    address: payingClient.signer.address,
-    fetchWithPayment: payingClient.fetchWithPayment,
-    readSettlement: response =>
-      payingClient.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
-  };
-  return {
-    address: payer.address,
-    client: createPaidResourceClient(payer, {
-      timeoutMs: config.shield.requestTimeoutMs,
-      maxResponseBytes: config.shield.maxResponseBytes,
-    }),
-  };
-}
 
+  // Resolve and expose the treasury address once; each resource call receives its own x402 client
+  // so its pre-sign payment policy is immutable and safe under concurrent jobs.
+  const identity = createAvmPayingClient(config.treasuryMnemonic, config.networkName, fetchImpl);
+  const address = identity.signer.address;
+
+  const client: ResourceClient = {
+    async execute(request, definition, jobId) {
+      const payingClient = createAvmPayingClient(config.treasuryMnemonic!, config.networkName, fetchImpl, {
+        paymentPolicies: [createDownstreamPaymentPolicy(config, definition)],
+      });
+      const payer: PaidFetchClient = {
+        address: payingClient.signer.address,
+        fetchWithPayment: payingClient.fetchWithPayment,
+        readSettlement: response =>
+          payingClient.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
+      };
+      return createPaidResourceClient(payer, {
+        timeoutMs: config.shield.requestTimeoutMs,
+        maxResponseBytes: config.shield.maxResponseBytes,
+      }).execute(request, definition, jobId);
+    },
+  };
+
+  return { address, client };
+}

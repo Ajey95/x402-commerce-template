@@ -4,7 +4,8 @@ import { AuditLog } from '../src/shield/audit.js';
 import { InMemoryJobStore } from '../src/shield/jobs.js';
 import { evaluatePolicy } from '../src/shield/policy.js';
 import { createResourceRegistry } from '../src/shield/registry.js';
-import type { ExecuteShieldRequest, ShieldConfig } from '../src/shield/types.js';
+import { parseExecuteShieldRequest } from '../src/shield/request.js';
+import type { ExecuteShieldRequest, ResourceDefinition, ShieldConfig } from '../src/shield/types.js';
 
 const shieldConfig: ShieldConfig = {
   maxJobSpendAtomic: 20_000,
@@ -24,23 +25,29 @@ function request(overrides: Partial<ExecuteShieldRequest> = {}): ExecuteShieldRe
     resources: [
       {
         id: 'weather',
-        url: 'https://shield.example/api/resources/weather',
+        input: { city: 'Bangalore' },
         maxPayment: 3_000,
         required: true,
-        expectedSchema: {
-          type: 'object',
-          required: ['temperature', 'condition'],
-          properties: {
-            temperature: { type: 'number' },
-            condition: { type: 'string', maxLength: 80 },
-          },
-          additionalProperties: false,
-        },
       },
     ],
     ...overrides,
   };
 }
+
+describe('shield request boundary', () => {
+  it('parses trusted resource ids with bounded provider input only', () => {
+    expect(parseExecuteShieldRequest(request())).toEqual(request());
+  });
+
+  it.each(['url', 'expectedSchema'])('rejects legacy client-controlled %s fields', field => {
+    const resource = {
+      ...request().resources[0]!,
+      [field]: field === 'url' ? 'https://attacker.example/pay' : { type: 'object' },
+    };
+    expect(() => parseExecuteShieldRequest({ requestId: 'job_123', resources: [resource] }))
+      .toThrow(/unrecognized|invalid_request/i);
+  });
+});
 
 describe('shield resource registry and spending policy', () => {
   it('loads bounded shield defaults and atomic USDC service fee', () => {
@@ -69,7 +76,7 @@ describe('shield resource registry and spending policy', () => {
     ).toThrow(/SHIELD_MAX_RESOURCES/);
   });
 
-  it('accepts an allowlisted resource within atomic-unit limits', () => {
+  it('accepts a trusted resource within atomic-unit limits', () => {
     const registry = createResourceRegistry(shieldConfig.baseUrl);
     expect(evaluatePolicy(request(), shieldConfig, registry)).toMatchObject({
       ok: true,
@@ -78,30 +85,61 @@ describe('shield resource registry and spending policy', () => {
     });
   });
 
-  it('allows exact same-origin resources when the configured service itself is local', () => {
-    const localConfig = { ...shieldConfig, baseUrl: 'http://localhost:3000' };
-    const registry = createResourceRegistry(localConfig.baseUrl);
-    const localRequest = request({
-      resources: [{
-        ...request().resources[0]!,
-        url: 'http://localhost:3000/api/resources/weather',
-      }],
-    });
-    expect(evaluatePolicy(localRequest, localConfig, registry)).toMatchObject({ ok: true });
-  });
-
-  it.each([
-    ['private host', 'http://127.0.0.1:9000/api/resources/weather', 'resource_url_not_allowed'],
-    ['non-http protocol', 'file:///etc/passwd', 'invalid_resource_url'],
-    ['unregistered host', 'https://attacker.example/api/resources/weather', 'resource_url_not_allowed'],
-  ])('rejects %s before payment', (_label, url, code) => {
+  it('rejects unknown providers before payment', () => {
     const registry = createResourceRegistry(shieldConfig.baseUrl);
     const result = evaluatePolicy(
-      request({ resources: [{ ...request().resources[0]!, url }] }),
+      request({ resources: [{ ...request().resources[0]!, id: 'evil-provider' }] }),
       shieldConfig,
       registry,
     );
-    expect(result).toMatchObject({ ok: false, code });
+    expect(result).toMatchObject({ ok: false, code: 'resource_not_allowed' });
+  });
+
+  it('rejects invalid provider input before payment', () => {
+    const registry = createResourceRegistry(shieldConfig.baseUrl);
+    expect(evaluatePolicy(
+      request({ resources: [{ ...request().resources[0]!, input: { city: 'Bangalore', unexpected: true } }] }),
+      shieldConfig,
+      registry,
+    )).toMatchObject({ ok: false, code: 'invalid_resource_input' });
+    expect(evaluatePolicy(
+      request({ resources: [{ ...request().resources[0]!, input: { city: '' } }] }),
+      shieldConfig,
+      registry,
+    )).toMatchObject({ ok: false, code: 'invalid_resource_input' });
+  });
+
+  it('accepts explicitly curated external providers without making them owned routes', () => {
+    const external: ResourceDefinition = {
+      id: 'external-research',
+      name: 'External Research',
+      origin: 'https://provider.example',
+      method: 'POST',
+      path: '/api/research',
+      priceAtomic: 2_500,
+      maxPriceAtomic: 3_000,
+      inputSchema: {
+        type: 'object',
+        required: ['query'],
+        properties: { query: { type: 'string', maxLength: 120 } },
+        additionalProperties: false,
+      },
+      responseSchema: {
+        type: 'object',
+        required: ['answer'],
+        properties: { answer: { type: 'string', maxLength: 1000 } },
+        additionalProperties: false,
+      },
+      trust: 'external-curated',
+      description: 'Curated external x402 research provider.',
+      tags: ['research', 'x402'],
+    };
+    const registry = createResourceRegistry(shieldConfig.baseUrl, [external]);
+    const result = evaluatePolicy({
+      requestId: 'job_ext',
+      resources: [{ id: 'external-research', input: { query: 'Algorand' }, maxPayment: 3_000, required: true }],
+    }, shieldConfig, registry);
+    expect(result).toMatchObject({ ok: true, quotedPriceAtomic: 4_000 });
   });
 
   it('rejects duplicate resources and excessive counts', () => {
@@ -113,10 +151,12 @@ describe('shield resource registry and spending policy', () => {
     });
 
     const tooMany = request({
-      resources: Array.from({ length: 4 }, (_, index) => ({
-        ...request().resources[0]!,
-        id: `weather-${index}`,
-      })),
+      resources: [
+        { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3_000, required: true },
+        { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3_000, required: true },
+        { id: 'sentiment-score', input: { text: 'fast' }, maxPayment: 3_000, required: true },
+        { id: 'unknown', input: {}, maxPayment: 1, required: false },
+      ],
     });
     expect(evaluatePolicy(tooMany, shieldConfig, registry)).toMatchObject({
       ok: false,

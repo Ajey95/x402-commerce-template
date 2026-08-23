@@ -7,10 +7,9 @@ const registry = createResourceRegistry('https://shield.example');
 const definition = registry.get('weather')!;
 const request = {
   id: 'weather',
-  url: 'https://shield.example/api/resources/weather',
+  input: { city: 'Bangalore' },
   maxPayment: 3_000,
   required: true,
-  expectedSchema: definition.schema,
 };
 
 function payer(response: Response, settlement: { success: boolean; transaction?: string }): PaidFetchClient {
@@ -22,9 +21,19 @@ function payer(response: Response, settlement: { success: boolean; transaction?:
 }
 
 describe('treasury paid resource client', () => {
-  it('returns JSON only after a successful settlement receipt', async () => {
-    const response = Response.json({ ok: true }, { headers: { 'payment-response': 'receipt' } });
-    const client = createPaidResourceClient(payer(response, { success: true, transaction: 'TX-123' }), {
+  it('maps validated input to the trusted provider URL and returns JSON only after settlement', async () => {
+    let calledUrl = '';
+    let calledInit: RequestInit | undefined;
+    const paid: PaidFetchClient = {
+      address: 'TREASURY-ADDRESS',
+      fetchWithPayment: async (input, init) => {
+        calledUrl = String(input);
+        calledInit = init;
+        return Response.json({ ok: true }, { headers: { 'payment-response': 'receipt' } });
+      },
+      readSettlement: () => ({ success: true, transaction: 'TX-123' }),
+    };
+    const client = createPaidResourceClient(paid, {
       timeoutMs: 1_000,
       maxResponseBytes: 1_024,
     });
@@ -35,6 +44,9 @@ describe('treasury paid resource client', () => {
       amountAtomic: 2_000,
       data: { ok: true },
     });
+    expect(calledUrl).toBe('https://shield.example/api/resources/weather?city=Bangalore');
+    expect(calledInit?.method).toBe('GET');
+    expect(calledInit?.redirect).toBe('manual');
   });
 
   it('rejects a response without confirmed settlement', async () => {

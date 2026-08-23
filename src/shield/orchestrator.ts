@@ -68,7 +68,7 @@ export class ShieldOrchestrator {
       try {
         const call = await resourceClient.execute(request, definition, jobId);
         downstreamAtomic += call.amountAtomic;
-        const validation = validateResourceResponse(call.data, definition.schema);
+        const validation = validateResourceResponse(call.data, definition.responseSchema);
         if (!validation.ok) {
           rejections += 1;
           resources.push({
@@ -90,7 +90,7 @@ export class ShieldOrchestrator {
             timestamp: Date.now(),
             paymentStatus: 'settled',
             amountAtomic: call.amountAtomic,
-            resourceUrl: request.url,
+            resourceUrl: `${definition.origin}${definition.path}`,
             responseStatus: call.status,
             validationResult: validation.code,
             durationMs: call.durationMs,
@@ -117,7 +117,7 @@ export class ShieldOrchestrator {
           timestamp: Date.now(),
           paymentStatus: 'settled',
           amountAtomic: call.amountAtomic,
-          resourceUrl: request.url,
+          resourceUrl: `${definition.origin}${definition.path}`,
           responseStatus: call.status,
           validationResult: 'passed',
           durationMs: call.durationMs,
@@ -152,7 +152,7 @@ export class ShieldOrchestrator {
           timestamp: Date.now(),
           paymentStatus: failure.details.paymentStatus,
           amountAtomic: failure.details.amountAtomic,
-          resourceUrl: request.url,
+          resourceUrl: `${definition.origin}${definition.path}`,
           responseStatus: failure.details.status,
           validationResult: 'not_run',
           durationMs: failure.details.durationMs,
@@ -162,7 +162,14 @@ export class ShieldOrchestrator {
     }
 
     const failed = resources.length - completed;
-    const status = failed === 0 ? 'COMPLETED' : completed === 0 ? 'FAILED' : 'PARTIAL_FAILURE';
+    const requiredFailed = job.request.resources.some(request => {
+      if (!request.required) return false;
+      const outcome = resources.find(item => item.id === request.id);
+      return !outcome || outcome.validation !== 'passed';
+    });
+    const status = requiredFailed
+      ? completed === 0 ? 'FAILED' : 'PARTIAL_FAILURE'
+      : failed === 0 ? 'COMPLETED' : 'PARTIAL_FAILURE';
     const remainingAtomic = Math.max(0, job.quotedPriceAtomic - downstreamAtomic - job.serviceFeeAtomic);
     const unsigned: UnsignedReceipt = {
       jobId,
@@ -194,4 +201,3 @@ export class ShieldOrchestrator {
     return receipt;
   }
 }
-
