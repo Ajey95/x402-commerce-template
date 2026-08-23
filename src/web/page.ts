@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../config.js';
+import { getTrustedExternalProviders } from '../shield/trusted-providers.js';
 
 function escapeHtml(value: string): string {
   return value
@@ -14,6 +15,15 @@ export function renderPage(config: RuntimeConfig): string {
   const network = escapeHtml(config.networkName.toUpperCase());
   const demoReady = config.demoMode && Boolean(config.demoMnemonic && config.treasuryMnemonic);
   const mode = demoReady ? 'DEMO PAYER READY' : 'QUOTE-ONLY MODE';
+  const external = getTrustedExternalProviders(config.networkName)[0]!;
+  const externalId = escapeHtml(external.id);
+  const externalName = escapeHtml(external.name);
+  const externalGoal = config.networkName === 'testnet'
+    ? 'fetch the signed external ALGO/USD price'
+    : 'hash CPMM-SHIELD with sha256';
+  const paymentLabel = config.networkName === 'testnet'
+    ? 'REAL TESTNET PAYMENT (x402 PATH; LIVE EVIDENCE REQUIRED)'
+    : 'MAINNET x402 PATH (REAL FUNDS; SETTLEMENT NOT CLAIMED)';
 
   return `<!doctype html>
 <html lang="en">
@@ -25,7 +35,7 @@ export function renderPage(config: RuntimeConfig): string {
     <link rel="stylesheet" href="/assets/styles.css" />
     <script src="/assets/app.js" defer></script>
   </head>
-  <body data-demo-ready="${demoReady}">
+  <body data-demo-ready="${demoReady}" data-network="${escapeHtml(config.networkName)}">
     <div class="grain" aria-hidden="true"></div>
     <header class="site-header">
       <a class="brand" href="/" aria-label="CPMM-SHIELD home">
@@ -45,7 +55,7 @@ export function renderPage(config: RuntimeConfig): string {
           <p class="kicker">AGENTIC COMMERCE · SETTLEMENT-FIRST EXECUTION</p>
           <h1 aria-label="One payment in. Many protected resources out.">One payment in.<br /><em>Many protected resources out.</em></h1>
           <p class="lede">CPMM-SHIELD lets an AI agent authorize one bounded x402 payment. The shield settles that payment first, then pays only trusted downstream providers from an isolated treasury, validates every response, and returns one signed receipt.</p>
-          <div class="truth-labels"><span class="sim-label">SIMULATED CONTENT</span><span class="real-label">REAL TESTNET PAYMENT</span></div>
+          <div class="truth-labels"><span class="sim-label">SIMULATED CONTENT (OWNED)</span><span class="real-label">PROVIDER CONTENT (${externalName})</span><span class="real-label">${paymentLabel}</span></div>
         </div>
         <div class="metric-grid" aria-label="Shield summary">
           <article><span>UPSTREAM PAYMENT</span><strong id="metric-upfront">—</strong><small>USDC</small></article>
@@ -69,7 +79,7 @@ export function renderPage(config: RuntimeConfig): string {
           <div class="resource-stack">
             <div data-resource="weather"><span>W</span><p><b>Weather</b><small>Waiting</small></p><i></i></div>
             <div data-resource="company-lookup"><span>C</span><p><b>Company lookup</b><small>Waiting</small></p><i></i></div>
-            <div data-resource="sentiment-score"><span>S</span><p><b>Sentiment score</b><small>Waiting</small></p><i></i></div>
+            <div data-resource="${externalId}"><span>E</span><p><b>${externalName}</b><small>Provider content · waiting</small></p><i></i></div>
           </div>
           <span class="connector"><i></i><small>FIREWALL</small></span>
           <div class="flow-node result-node" data-flow="result"><span class="node-index">06</span><b>Signed receipt</b><small>Validated aggregate result</small></div>
@@ -82,7 +92,7 @@ export function renderPage(config: RuntimeConfig): string {
           <p class="panel-copy">The browser submits only trusted resource IDs, provider-specific inputs, and payment ceilings. Provider URLs, response schemas, network, asset, and recipients remain server-controlled. Policy runs before any payment challenge.</p>
           <form id="shield-form">
             <label for="job-description">Agent goal</label>
-            <textarea id="job-description" rows="3">Get Bangalore weather, look up Algorand Foundation, and score this review: “Secure, scalable and fast.”</textarea>
+            <textarea id="job-description" rows="3">Get Bangalore weather, look up Algorand Foundation, and ${externalGoal}.</textarea>
             <div class="form-row"><div><label for="job-id">Request ID</label><input id="job-id" autocomplete="off" /></div><button id="run-button" type="submit">Run shield quote <span aria-hidden="true">→</span></button></div>
           </form>
           <div id="runner-message" class="runner-message" aria-live="polite"><span></span><p><b>Ready for an intent.</b><small>No payment is requested until policy validation passes.</small></p></div>
@@ -94,8 +104,8 @@ export function renderPage(config: RuntimeConfig): string {
         </article>
 
         <aside class="registry-panel">
-          <div class="section-heading compact"><div><p class="kicker">TRUST BOUNDARY</p><h2>Trusted providers</h2></div><span id="registry-count">3 ACTIVE</span></div>
-          <div id="resource-registry" class="registry-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+          <div class="section-heading compact"><div><p class="kicker">TRUST BOUNDARY</p><h2>Trusted providers</h2></div><span id="registry-count">4 ACTIVE</span></div>
+          <div id="resource-registry" class="registry-list"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
           <div class="policy-note"><span aria-hidden="true">⌁</span><p><b>Trusted provider policy</b><small>Clients cannot override provider URL, schema, recipient, network, or asset. Redirects, replay, excess spend, oversized payloads, malformed JSON, schema violations, and blocked instruction markers are rejected.</small></p></div>
         </aside>
       </section>
@@ -115,7 +125,7 @@ export function renderPage(config: RuntimeConfig): string {
         </article>
       </section>
     </main>
-    <footer><span>CPMM-SHIELD · AGENTIC SOLUTIONS TRACK</span><span>HTTP 402 → ALGORAND USDC → SETTLEMENT → RESPONSE FIREWALL → SIGNED RECEIPT</span></footer>
+    <footer><span>CPMM-SHIELD · ORCHESTRATOR ENTRY</span><span>HTTP 402 → ALGORAND USDC → SETTLEMENT → RESPONSE FIREWALL → SIGNED RECEIPT</span></footer>
   </body>
 </html>`;
 }

@@ -12,6 +12,7 @@ Good x402 services sell a small, clear unit of value that software can evaluate 
 | Compute | One bounded job | Simulation, quote, route, ranking |
 | Access | One content item | Report, file, premium feed item |
 | Action | One external operation | Create ticket, post alert, trigger workflow |
+| Orchestration | One settled aggregate job | Pay several allowlisted providers, validate outputs, return one signed receipt |
 
 ## Design Rules
 
@@ -21,6 +22,7 @@ Good x402 services sell a small, clear unit of value that software can evaluate 
 - Make input and output schemas explicit.
 - Avoid hidden side effects unless the route clearly sells an action.
 - Add buyer policy examples so agents know when to pay.
+- For orchestrators, pin every downstream network, asset, amount, recipient, input schema, and response schema before any signer is invoked.
 
 ## Bad Fits
 

@@ -1,13 +1,21 @@
-import 'dotenv/config';
+import { createDemoShieldRequest } from '../client/shield-client.js';
+import { createResourceRegistry } from '../src/shield/registry.js';
+import { getTrustedExternalProviders } from '../src/shield/trusted-providers.js';
 
-const resources = [
-  { id: 'weather', price: 2_000, result: 'validated' },
-  { id: 'company-lookup', price: 3_000, result: 'validated' },
-  { id: 'sentiment-score', price: 2_000, result: 'validated' },
-] as const;
-const declared = resources.map(resource => ({ ...resource, maxPayment: 3_000 }));
+const networkName = 'testnet';
+const request = createDemoShieldRequest('https://shield.example', 'simulation', networkName);
+const registry = createResourceRegistry(
+  'https://shield.example',
+  getTrustedExternalProviders(networkName),
+);
+const resources = request.resources.map(resource => ({
+  id: resource.id,
+  price: registry.get(resource.id)!.priceAtomic,
+  maxPayment: resource.maxPayment,
+  result: resource.id === 'external-algo-price' ? 'provider content validated' : 'simulated content validated',
+}));
 const serviceFee = 1_000;
-const upfront = declared.reduce((sum, resource) => sum + resource.maxPayment, serviceFee);
+const upfront = resources.reduce((sum, resource) => sum + resource.maxPayment, serviceFee);
 const spent = resources.reduce((sum, resource) => sum + resource.price, 0);
 const remaining = upfront - spent - serviceFee;
 const usdc = (atomic: number) => (atomic / 1_000_000).toFixed(6);
@@ -33,5 +41,7 @@ console.log(JSON.stringify({
     serviceFee: usdc(serviceFee),
     remaining: usdc(remaining),
   },
+  network: networkName,
+  contentBoundary: 'Owned results are simulated content; external-algo-price is provider content.',
   note: 'SIMULATION — NO REAL FUNDS',
 }, null, 2));

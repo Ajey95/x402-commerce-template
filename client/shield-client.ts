@@ -1,13 +1,21 @@
 import type { ExecuteShieldRequest, ShieldReceipt } from '../src/shield/types.js';
+import type { AlgorandNetwork } from '../src/config.js';
 
-export function createDemoShieldRequest(_baseUrl: string, requestId: string): ExecuteShieldRequest {
+export function createDemoShieldRequest(
+  _baseUrl: string,
+  requestId: string,
+  networkName: AlgorandNetwork = 'testnet',
+): ExecuteShieldRequest {
+  const external = networkName === 'testnet'
+    ? { id: 'external-algo-price', input: {} }
+    : { id: 'external-hash', input: { text: 'CPMM-SHIELD', algo: 'sha256' } };
   return {
     requestId,
     resources: [
       {
         id: 'weather',
         input: { city: 'Bangalore' },
-        maxPayment: 3_000,
+        maxPayment: 2_000,
         required: true,
       },
       {
@@ -17,9 +25,8 @@ export function createDemoShieldRequest(_baseUrl: string, requestId: string): Ex
         required: true,
       },
       {
-        id: 'sentiment-score',
-        input: { text: 'Algorand enables secure, scalable agentic payments.' },
-        maxPayment: 3_000,
+        ...external,
+        maxPayment: 1_000,
         required: true,
       },
     ],

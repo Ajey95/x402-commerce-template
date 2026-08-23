@@ -4,7 +4,7 @@
 
 CPMM-SHIELD is a settlement-first x402 payment firewall and orchestrator for AI agents on Algorand. A client makes one bounded upstream USDC payment; the shield confirms settlement, pays only server-trusted downstream x402 resources from a separate treasury, validates every response, and returns one Ed25519-signed, auditable receipt.
 
-Built for the x402 Global Challenge, Agentic Solutions track, on top of the organizer-provided x402 commerce starter.
+Built for the x402 Global Challenge as an **Orchestrator entry**, on top of the organizer-provided x402 commerce starter.
 
 ## Why it exists
 
@@ -21,7 +21,7 @@ A multi-tool AI agent can otherwise expose its wallet to every provider, accept 
 - replayed payment proofs and changed duplicate request IDs are rejected;
 - the final signed receipt makes payment and validation outcomes machine-verifiable.
 
-The built-in weather, company, and sentiment payloads are **SIMULATED CONTENT**. Their x402 payment path can be real on Algorand TestNet and is labeled **REAL TESTNET PAYMENT** in the dashboard.
+The built-in weather, company, and sentiment payloads are **SIMULATED CONTENT**. The deterministic three-item flow uses weather and company lookup plus one independently hosted provider selected by network. The dashboard labels owned simulation separately from **PROVIDER CONTENT** and labels a live configured TestNet payment path **REAL TESTNET PAYMENT**.
 
 ## Architecture
 
@@ -83,6 +83,15 @@ CPMM-SHIELD separates **discovery** from **authorization**.
 
 The authoritative provider definition owns the origin, path, method, price, input schema, response schema, timeout, size limit, description, tags, and trust mode. The public request cannot override these controls.
 
+Only one curated external provider is active at a time:
+
+| Network | Active provider | Contract | Pinned price |
+| --- | --- | --- | ---: |
+| TestNet | `external-algo-price` at `https://recourse-api-production.up.railway.app/feed/compliant` | `GET`, exact `{}` input, signed ALGO/USD price response | 0.001000 USDC |
+| MainNet | `external-hash` at `https://agent402.tools/api/hash` | `POST`, exact `{ text, algo }` input, deterministic hash response | 0.001000 USDC |
+
+The other network's external provider ID is absent from the registry and rejected before any payment challenge. Every curated definition pins its own Algorand recipient, while treasury policy also pins the runtime network, USDC ASA, and exact amount before signing.
+
 ## Payment flow
 
 1. `POST /api/shield/execute` parses strict JSON and accepts only resource ID, provider-specific input, caller payment ceiling, and required flag.
@@ -106,7 +115,7 @@ pnpm install
 pnpm smoke
 ```
 
-The structural smoke initializes the app, verifies health and trusted registry, obtains an official dynamic-price HTTP 402, proves malformed input is rejected before payment, and checks replay reservation. It explicitly prints that no funds moved.
+The structural smoke initializes the app, verifies the four-resource active registry, checks that the deterministic job requests exactly three resources, obtains an official 0.007000-USDC dynamic-price HTTP 402 on TestNet, proves malformed input is rejected before payment, and checks replay reservation. It explicitly prints that no funds moved.
 
 Full live TestNet acceptance, with a running configured service and funded disposable client/treasury wallets:
 
@@ -120,7 +129,7 @@ PowerShell:
 $env:LIVE_X402='true'; pnpm smoke
 ```
 
-Live mode settles the upstream payment, pays and validates all three owned demo resources through their x402 boundaries, verifies the aggregate signature, captures the payment proof, and confirms replay against a different job returns HTTP 409.
+When configured with funded disposable TestNet credentials, live mode attempts the three-item flow of two owned resources plus `external-algo-price`, requires settlement evidence for every paid boundary, verifies the aggregate signature, captures the payment proof, and confirms replay against a different job returns HTTP 409. This documentation is not evidence that a live run has succeeded.
 
 ## Local setup
 
@@ -153,7 +162,7 @@ pnpm demo:scripted
 OpenAI tool-calling flow:
 
 ```bash
-pnpm client:shield "Get Bangalore weather, look up Algorand Foundation, and score the sentiment of Secure, scalable and fast."
+pnpm client:shield "Get Bangalore weather, look up Algorand Foundation, and fetch the signed external ALGO/USD price."
 ```
 
 The OpenAI client exposes exactly one bounded `requestShieldJob` commerce tool. The model may choose only listed trusted resource IDs and bounded provider inputs. It cannot choose provider URLs, recipients, network, asset, schemas, or treasury credentials. The confirmed signed receipt is fed back to the Responses API, and the model is instructed to summarize only validated receipt results.
@@ -182,7 +191,7 @@ Secure request contract:
 
 Clients **never** submit provider URLs, response schemas, recipient addresses, networks, or assets. These are trusted server-side configuration.
 
-Monetary fields are atomic USDC units with six decimals. A three-resource request with `maxPayment: 3000` for each resource and a 1000-atomic service fee quotes 10000 atomic USDC, or `0.010000`.
+Monetary fields are atomic USDC units with six decimals. The TestNet deterministic request uses ceilings equal to current trusted prices: weather 2000, company lookup 3000, and external ALGO price 1000 atomic units. With the 1000-atomic service fee, the quote is 7000 atomic USDC, or `0.007000`.
 
 Unpaid response: HTTP 402, `PAYMENT-REQUIRED` header, plus a JSON quote containing job ID, price, binding, and expiry.
 
@@ -194,10 +203,10 @@ Example paid response:
   "status": "COMPLETED",
   "summary": { "requested": 3, "completed": 3, "failed": 0, "rejections": 0 },
   "payments": {
-    "upfront": "0.010000",
-    "downstream": "0.007000",
+    "upfront": "0.007000",
+    "downstream": "0.006000",
     "serviceFee": "0.001000",
-    "remaining": "0.002000"
+    "remaining": "0.000000"
   },
   "resources": [],
   "results": {},
@@ -227,11 +236,17 @@ Example paid response:
 
 The legacy `GET /api/wallet/:address` paid example remains for compatibility but is not the primary product.
 
+### Curated external resources
+
+`ALGORAND_NETWORK=testnet` exposes only `external-algo-price`; `ALGORAND_NETWORK=mainnet` exposes only `external-hash`. Both are independently hosted and labeled `external-curated` / `PROVIDER CONTENT`. They are not owned demo routes and are never described as simulated content.
+
 ## Adding a curated external x402 provider
 
 Add an explicit `ResourceDefinition` to a curated registry configuration and pass it to `createResourceRegistry(...)` / `createApp({ registry })`. A definition must include trusted origin/path/method/pricing, exact input and response schemas, trust mode, and metadata.
 
 Do not take a provider URL directly from an AI-generated request and do not automatically trust a Bazaar discovery result.
+
+MainNet activation remains gated on a production-safe signer, deliberately funded MainNet accounts, correct USDC opt-ins, and independently verified real settlement evidence. `DEMO_MODE` remains prohibited on MainNet, and structural tests or unpaid HTTP 402 checks are not settlement evidence.
 
 See:
 

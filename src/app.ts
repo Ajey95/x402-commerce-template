@@ -21,7 +21,7 @@ import { createReceiptSigner, createReceiptSignerFromMnemonic, type ReceiptSigne
 import { createResourceRegistry, type ResourceRegistry } from './shield/registry.js';
 import { ResourceCallError, type ResourceClient } from './shield/resource-client.js';
 import { createTreasuryResourceClient } from './shield/treasury.js';
-import { TRUSTED_EXTERNAL_PROVIDERS } from './shield/trusted-providers.js';
+import { getTrustedExternalProviders } from './shield/trusted-providers.js';
 import { APP_SCRIPT } from './web/app-script.js';
 import { renderPage } from './web/page.js';
 import { STYLES } from './web/styles.js';
@@ -64,7 +64,10 @@ export function createApp(config: RuntimeConfig, options: AppOptions = {}) {
   const algorand = new AlgorandService(config.indexerUrl, Number(config.usdcAssetId), options.fetchImpl);
   const store = options.store ?? new InMemoryJobStore();
   const audit = options.audit ?? new AuditLog();
-  const registry = options.registry ?? createResourceRegistry(config.shield.baseUrl, TRUSTED_EXTERNAL_PROVIDERS);
+  const registry = options.registry ?? createResourceRegistry(
+    config.shield.baseUrl,
+    getTrustedExternalProviders(config.networkName),
+  );
   const quotes = new QuoteService({
     config: config.shield,
     registry,
