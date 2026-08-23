@@ -1,3 +1,4 @@
+import algosdk from 'algosdk';
 import type { ResourceDefinition } from './types.js';
 
 export type ResourceRegistry = ReadonlyMap<string, ResourceDefinition>;
@@ -24,6 +25,9 @@ function assertDefinition(definition: ResourceDefinition): void {
     }
     if (isPrivateHostname(origin.hostname)) {
       throw new Error(`External resource ${definition.id} must not target a private-network hostname.`);
+    }
+    if (!definition.payTo || !algosdk.isValidAddress(definition.payTo)) {
+      throw new Error(`External resource ${definition.id} must pin a valid Algorand payTo address.`);
     }
   }
   if (!definition.path.startsWith('/')) {
