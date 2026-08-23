@@ -62,7 +62,7 @@ export function getTrustedExternalProviders(networkName: AlgorandNetwork): Resou
       required: ['text', 'algo'],
       properties: {
         text: { type: 'string', maxLength: 5_000 },
-        algo: { type: 'string', maxLength: 8 },
+        algo: { type: 'string', maxLength: 8, enum: ['sha256', 'sha512', 'sha1', 'md5'] },
       },
       additionalProperties: false,
     },
