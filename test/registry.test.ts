@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createResourceRegistry } from '../src/shield/registry.js';
 import type { ResourceDefinition } from '../src/shield/types.js';
 
+const externalPayTo = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY5HFKQ';
+
 function external(origin: string): ResourceDefinition {
   return {
     id: 'external-research',
@@ -11,6 +13,7 @@ function external(origin: string): ResourceDefinition {
     path: '/api/research',
     priceAtomic: 2_500,
     maxPriceAtomic: 3_000,
+    payTo: externalPayTo,
     inputSchema: {
       type: 'object',
       required: ['query'],
@@ -30,12 +33,13 @@ function external(origin: string): ResourceDefinition {
 }
 
 describe('trusted external provider registry', () => {
-  it('accepts an explicitly curated HTTPS provider', () => {
+  it('accepts an explicitly curated HTTPS provider with a pinned recipient', () => {
     const registry = createResourceRegistry('http://localhost:3000', [external('https://provider.example')]);
     expect(registry.get('external-research')).toMatchObject({
       trust: 'external-curated',
       origin: 'https://provider.example',
       maxPriceAtomic: 3_000,
+      payTo: externalPayTo,
     });
   });
 
@@ -48,6 +52,14 @@ describe('trusted external provider registry', () => {
     'https://192.168.1.7',
   ])('rejects unsafe curated origin %s', origin => {
     expect(() => createResourceRegistry('http://localhost:3000', [external(origin)])).toThrow();
+  });
+
+  it('rejects a curated provider without a pinned valid Algorand recipient', () => {
+    const withoutRecipient = { ...external('https://provider.example'), payTo: undefined };
+    expect(() => createResourceRegistry('http://localhost:3000', [withoutRecipient])).toThrow(/payTo/);
+
+    const invalidRecipient = { ...external('https://provider.example'), payTo: 'not-an-address' };
+    expect(() => createResourceRegistry('http://localhost:3000', [invalidRecipient])).toThrow(/payTo/);
   });
 
   it('rejects a curated provider whose declared price exceeds its own ceiling', () => {
