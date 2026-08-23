@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { clientNetwork, createPayingClient, explainPaymentError } from './lib.js';
 import { selectAvailableModel } from './openai-model.js';
 import { requestShieldJobWithProof } from './shield-client.js';
-import { createShieldTool, createShieldToolInstructions } from './shield-tool.js';
+import { createDefaultAgentGoal, createShieldTool, createShieldToolInstructions } from './shield-tool.js';
 import type { ExecuteShieldRequest } from '../src/shield/types.js';
 
 interface OpenAIItem {
@@ -71,8 +71,7 @@ async function main() {
   const requestedModel = process.env.OPENAI_MODEL?.trim() || 'gpt-5.6';
   const baseUrl = (process.env.API_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
   const network = clientNetwork();
-  const goal = process.argv.slice(2).join(' ') ||
-    'Get Bangalore weather, look up Algorand Foundation, and score the sentiment of “Secure, scalable and fast.”';
+  const goal = process.argv.slice(2).join(' ') || createDefaultAgentGoal(network.name);
   const selection = await resolveModel(apiKey, requestedModel);
   const model = selection.model;
   console.log(

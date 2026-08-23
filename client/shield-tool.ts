@@ -61,3 +61,9 @@ export function createShieldToolInstructions(networkName: AlgorandNetwork): stri
     : 'external-hash input is exactly {text, algo}; use {text: "CPMM-SHIELD", algo: "sha256"} for the deterministic demo.';
   return `You are a commerce agent using CPMM-SHIELD as a payment firewall. Use requestShieldJob at most once. Choose only listed trusted resource IDs. Weather input is {city}; company-lookup input is {name}; sentiment-score input is {text}; ${external} Never invent URLs, payment recipients, schemas, networks, assets, or wallet credentials. After the tool result, summarize only validated results from the signed receipt.`;
 }
+
+export function createDefaultAgentGoal(networkName: AlgorandNetwork): string {
+  return networkName === 'testnet'
+    ? 'Get Bangalore weather, look up Algorand Foundation, and fetch the signed external ALGO/USD price from external-algo-price.'
+    : 'Get Bangalore weather, look up Algorand Foundation, and hash CPMM-SHIELD with sha256 using external-hash.';
+}
