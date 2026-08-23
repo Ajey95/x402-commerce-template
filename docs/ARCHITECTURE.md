@@ -1,61 +1,63 @@
-# x402 Commerce Template Architecture
+# CPMM-SHIELD Orchestrator Architecture
 
-x402 Commerce Template keeps the paid HTTP concern separate from the resource logic. The default sample resource sells Algorand wallet data, but the same structure works for any bounded API result or action.
+CPMM-SHIELD is an x402 Orchestrator. Its primary paid route is `POST /api/shield/execute`: a client pays the shield once, the shield confirms upstream settlement, then an isolated treasury pays only network-appropriate trusted downstream resources. Settled responses pass the response firewall before one signed aggregate receipt is returned.
 
 ```mermaid
 flowchart TD
-    Client[Client or Agent] -->|GET resource input| API[Hono Resource Server]
-    API --> Gate[x402 Middleware]
-    Gate -->|Verify and settle| Facilitator[GoPlausible Facilitator]
-    Facilitator -->|USDC transfer| Chain[Algorand]
-    Chain --> Receiver[Merchant payTo Wallet]
-    API -->|Default example lookup| Data[Resource data provider]
-    Data -->|Paid result data| API
-    Gate -.->|Discovery metadata| Bazaar[Bazaar Catalog]
+    Client[Client / AI agent] -->|trusted IDs + bounded inputs| Policy[Strict request policy]
+    Policy -->|invalid| Reject[4xx before payment]
+    Policy -->|valid| Quote[Bound dynamic quote]
+    Quote -->|HTTP 402| Client
+    Client -->|paid retry| Upstream[Upstream x402 middleware]
+    Upstream --> Facilitator[GoPlausible facilitator]
+    Facilitator -->|settle client USDC| Algorand[Algorand]
+    Algorand --> Confirmed[Upstream settlement stored]
+    Confirmed --> Treasury[Isolated treasury payer]
+    Treasury --> Registry[Network-selected trusted registry]
+    Registry --> Owned[Owned weather / company]
+    Registry --> External[TestNet price feed or MainNet hash]
+    Owned -->|downstream x402 settlement| Firewall[Response firewall]
+    External -->|downstream x402 settlement| Firewall
+    Firewall --> Receipt[Ed25519 signed aggregate receipt]
+    Legacy[GET /api/wallet/:address] -. compatibility only .-> Upstream
 ```
 
-## Components
+## Primary request boundary
 
-### Client
+The public shield request contains only a request ID and up to three resource selections with provider-specific input, a payment ceiling, and a required flag. Clients cannot supply provider URLs, recipients, networks, assets, request/response schemas, or treasury credentials.
 
-The client asks for a paid response over normal HTTP. An unpaid client stops at the `402`. A paying client interprets the response, chooses a supported requirement, signs with its own wallet, and retries. x402 Commerce Template never receives the payer mnemonic.
+The policy and quote layer runs before x402 middleware. Malformed input, unsupported provider algorithms, wrong-network resource IDs, duplicate resources, and budget violations therefore fail before a payment challenge.
 
-### x402 Commerce Template Resource Server
+## Two settlement boundaries
 
-Hono exposes public `GET /health` and a default paid route at `GET /api/wallet/:address`. Address syntax is checked before the payment middleware. Once payment is verified, the handler asks the resource service for the deterministic result. Participants can replace this route with their own paid data, compute, verification, or action endpoint.
+The upstream and downstream payments are independent:
 
-### x402 Middleware
+1. The client receives the shield's bound 402, signs, retries, and must obtain confirmed upstream settlement.
+2. Only after that settlement is stored may the isolated treasury call downstream resources.
+3. Each downstream payment requirement must match the runtime Algorand network, USDC ASA, exact trusted amount, and pinned recipient before signing.
+4. Each downstream HTTP response must include successful settlement evidence. HTTP 200 alone is insufficient.
 
-The middleware declares the exact scheme, USDC price, Algorand network, receiver, MIME type, description, and Bazaar extension. It constructs the `402`, verifies paid retries through the facilitator, and attaches the settlement response.
+## Network-selected providers
 
-### GoPlausible Facilitator
+The active registry always contains three owned demo resources plus one curated external provider:
 
-The facilitator reports supported scheme/network pairs and handles verification and settlement. The resource server delegates these blockchain-facing operations; it does not hold the merchant key. Successful traffic also feeds GoPlausible's dashboard, Bazaar catalog, and Challenge leaderboard.
+| Runtime network | External provider | Request |
+| --- | --- | --- |
+| TestNet | `external-algo-price` | `GET https://recourse-api-production.up.railway.app/feed/compliant`, exact `{}` input |
+| MainNet | `external-hash` | `POST https://agent402.tools/api/hash`, exact `{ text, algo }` input |
 
-### Algorand Network
+The inactive external ID is absent and rejected before payment. Owned resource payloads are labeled simulated content; the independently hosted result is labeled provider content.
 
-Algorand is the settlement rail for the USDC asset transfer. TestNet is safe demo infrastructure; MainNet settles real value and is required for current Challenge ranking.
+## Response firewall and receipt
 
-### Resource Data Provider
+Downstream redirects, non-success responses, missing settlement receipts, non-JSON/oversized/malformed bodies, exact-schema violations, and narrow blocked instruction markers are rejected. Settled spend remains visible even when content validation fails. Valid results and per-resource payment outcomes are aggregated into an Ed25519-signed receipt.
 
-The default sample separately calls an Algorand Indexer for public account data. A customized service might call another API, read chain state, compute a result, or trigger a bounded action. Changing the resource logic does not change the payment protocol.
+## Discovery and legacy compatibility
 
-### Bazaar
+Bazaar metadata describes `POST /api/shield/execute`, but discovery never authorizes treasury spending. A provider becomes payable only through explicit curated configuration.
 
-Bazaar is discovery, not payment processing. x402 Commerce Template sends a machine-readable input description and output example as an x402 extension. A facilitator can index that metadata after observing a settled request.
+`GET /api/wallet/:address` remains a legacy starter-template example. Its single wallet-data payment can test basic x402 compatibility, but it is not the CPMM-SHIELD Orchestrator flow or acceptable Orchestrator settlement evidence.
 
-### Merchant Wallet
+## MainNet boundary
 
-`PAY_TO_ADDRESS` is the public Algorand account that receives USDC. It must be on the configured network and opted into that network's USDC ASA. The server never needs its mnemonic or private key.
-
-## Two Uses of Algorand
-
-```mermaid
-flowchart LR
-    Service[Resource server] -->|Data or action request| Data[Resource data plane]
-    Service -->|x402 verification request| Pay[Payment control plane]
-    Pay --> Facilitator
-    Facilitator -->|USDC settlement| Algorand
-```
-
-The data request can fail even when payment infrastructure is healthy, and the facilitator can fail even when the Indexer is healthy. Keeping these paths visible makes demo debugging much easier.
+MainNet uses real funds and never permits server-side demo payer mode. MainNet success requires secure signer custody, deliberate funding and USDC opt-ins, successful upstream and downstream settlement receipts, and independent on-chain confirmation. Registry presence, simulation, structural smoke, and an unpaid 402 are not settlement evidence.
