@@ -184,6 +184,10 @@ describe('shield orchestrator', () => {
       validation: 'not_run',
       errorCode: 'downstream_timeout',
     });
+    expect(receipt.resources[1]).toHaveProperty('txnId', undefined);
+
+    const transported = JSON.parse(JSON.stringify(receipt)) as typeof receipt;
+    expect(verifyReceipt(transported)).toBe(true);
   });
 
   it('keeps optional failures visible without discarding valid results', async () => {

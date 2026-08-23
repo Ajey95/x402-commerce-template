@@ -9,15 +9,26 @@ export interface ReceiptSigner {
   sign(receipt: UnsignedReceipt): ShieldReceipt;
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+function serializeJsonValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    return `[${Array.from(value, entry => serializeJsonValue(entry) ?? 'null').join(',')}]`;
+  }
   if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
+    const entries = Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
-      .join(',')}}`;
+      .flatMap(([key, entry]) => {
+        const serialized = serializeJsonValue(entry);
+        return serialized === undefined ? [] : [`${JSON.stringify(key)}:${serialized}`];
+      });
+    return `{${entries.join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function stableJson(value: unknown): string {
+  const serialized = serializeJsonValue(value);
+  if (serialized === undefined) throw new TypeError('Receipt must be JSON-serializable.');
+  return serialized;
 }
 
 function signingBytes(receipt: UnsignedReceipt): Uint8Array {
