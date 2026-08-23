@@ -39,13 +39,12 @@ function setFlow(name, state) {
 }
 
 function makeRequest(requestId) {
-  const origin = location.origin;
   return {
     requestId,
     resources: [
-      { id: 'weather', url: origin + '/api/resources/weather', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['temperature', 'condition'] } },
-      { id: 'company-lookup', url: origin + '/api/resources/company-lookup', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['name', 'founded'] } },
-      { id: 'sentiment-score', url: origin + '/api/resources/sentiment-score', maxPayment: 3000, required: true, expectedSchema: { type: 'object', required: ['score', 'label'] } }
+      { id: 'weather', input: { city: 'Bangalore' }, maxPayment: 3000, required: true },
+      { id: 'company-lookup', input: { name: 'Algorand Foundation' }, maxPayment: 3000, required: true },
+      { id: 'sentiment-score', input: { text: 'Algorand enables secure, scalable agentic payments.' }, maxPayment: 3000, required: true }
     ]
   };
 }
@@ -77,7 +76,10 @@ function renderReceipt(receipt) {
     const row = document.querySelector('[data-resource="' + item.id + '"]');
     if (!row) continue;
     row.className = item.validation === 'passed' ? 'done' : 'failed';
-    row.querySelector('small').textContent = item.validation === 'passed' ? 'Paid · validated' : (item.errorCode || 'Failed');
+    const detail = item.validation === 'passed'
+      ? 'Settled ' + atomic(item.amountAtomic) + ' · validated' + (item.txnId ? ' · ' + item.txnId.slice(0, 10) + '…' : '')
+      : (item.errorCode || 'Failed');
+    row.querySelector('small').textContent = detail;
   }
   setFlow('result', receipt.status === 'COMPLETED' ? 'done' : 'failed');
 }
@@ -90,11 +92,11 @@ async function loadRegistry() {
     container.innerHTML = data.resources.map(item =>
       '<div class="registry-item">' +
         '<span>' + escapeHtml(item.id.charAt(0).toUpperCase()) + '</span>' +
-        '<p><b>' + escapeHtml(item.id) + '</b><small>' + escapeHtml(item.method) + ' ' + escapeHtml(item.path) + '</small></p>' +
+        '<p><b>' + escapeHtml(item.name || item.id) + '</b><small>' + escapeHtml(item.trust) + ' · ' + escapeHtml(item.method) + ' ' + escapeHtml(item.origin + item.path) + '</small></p>' +
         '<code>' + atomic(item.priceAtomic) + '</code>' +
       '</div>',
     ).join('');
-    document.querySelector('#registry-count').textContent = data.resources.length + ' ACTIVE';
+    document.querySelector('#registry-count').textContent = data.resources.length + ' TRUSTED';
   } catch {
     container.innerHTML = '<p class="empty-state">Resource registry unavailable.</p>';
   }
@@ -136,7 +138,7 @@ form.addEventListener('submit', async event => {
   activeJobId = jobInput.value.trim() || makeJobId();
   jobInput.value = activeJobId;
   const request = makeRequest(activeJobId);
-  setMessage('working', 'Validating policy and requesting quote…', 'No downstream request has started.');
+  setMessage('working', 'Validating trusted providers, inputs, and budget…', 'No payment challenge is created until policy passes.');
   setFlow('client', 'active');
 
   try {
@@ -155,8 +157,8 @@ form.addEventListener('submit', async event => {
     renderQuote(data.quote);
     setFlow('quote', 'active');
     setMessage('success', 'Policy passed. Bound x402 quote created.', demoReady
-      ? 'The server-side TestNet demo payer is settling this request now.'
-      : 'Configure DEMO_MODE + CLIENT_MNEMONIC or run pnpm client:shield to settle it.');
+      ? 'The server-side disposable TestNet payer is settling this request now.'
+      : 'Configure DEMO_MODE + disposable TestNet mnemonics or run pnpm client:shield to settle it.');
 
     if (demoReady) {
       setFlow('shield', 'active');
@@ -166,7 +168,7 @@ form.addEventListener('submit', async event => {
       const receipt = await paid.json().catch(() => ({}));
       if (!paid.ok) throw new Error(receipt.message || 'Paid demo returned HTTP ' + paid.status + '.');
       renderReceipt(receipt);
-      setMessage('success', 'Settlement confirmed and receipt signed.', 'All results below passed the configured validation policy.');
+      setMessage('success', 'Settlement confirmed, downstream responses validated, receipt signed.', 'Only validated resource results are included below.');
     }
   } catch (error) {
     setMessage('error', 'Shield request stopped.', error instanceof Error ? error.message : String(error));
