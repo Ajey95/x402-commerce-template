@@ -1,3 +1,4 @@
+import type { PaymentPolicy } from '@x402/fetch';
 import type { RuntimeConfig } from '../config.js';
 import { createAvmPayingClient } from '../x402/client.js';
 import { buildProviderRequest } from './provider-request.js';
@@ -13,6 +14,30 @@ export interface PaidFetchClient {
 export interface PaidResourceClientOptions {
   timeoutMs: number;
   maxResponseBytes: number;
+}
+
+/**
+ * Filters a downstream provider's advertised 402 requirements before a transaction is signed.
+ * The treasury will pay only the configured Algorand network, configured USDC asset, and exact
+ * trusted resource price. Owned demo resources are also pinned to the shield receiver; curated
+ * external providers may optionally pin an expected recipient in their ResourceDefinition.
+ */
+export function createDownstreamPaymentPolicy(
+  config: Pick<RuntimeConfig, 'network' | 'usdcAssetId' | 'payTo'>,
+  definition: ResourceDefinition,
+): PaymentPolicy {
+  const expectedPayTo = definition.trust === 'owned-demo' ? config.payTo : definition.payTo;
+  return (_version, requirements) =>
+    requirements.filter(requirement => {
+      const avm = requirement as typeof requirement & { asset?: string | number };
+      return (
+        requirement.scheme === 'exact' &&
+        requirement.network === config.network &&
+        String(requirement.amount) === String(definition.priceAtomic) &&
+        String(avm.asset ?? '') === String(config.usdcAssetId) &&
+        (!expectedPayTo || requirement.payTo === expectedPayTo)
+      );
+    });
 }
 
 export function createPaidResourceClient(
@@ -32,9 +57,15 @@ export function createPaidResourceClient(
         response = await payer.fetchWithPayment(built.url, built.init);
       } catch (error) {
         const timedOut = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        const paymentRejected = !timedOut && (message.includes('payment') || message.includes('requirement'));
         throw new ResourceCallError(
-          timedOut ? 'downstream_timeout' : 'downstream_unavailable',
-          timedOut ? 'The downstream resource timed out.' : 'The downstream resource could not be reached.',
+          timedOut ? 'downstream_timeout' : paymentRejected ? 'downstream_payment_rejected' : 'downstream_unavailable',
+          timedOut
+            ? 'The downstream resource timed out.'
+            : paymentRejected
+              ? 'The downstream payment challenge did not match trusted policy.'
+              : 'The downstream resource could not be reached.',
           { paymentStatus: 'failed', durationMs: Date.now() - started },
         );
       }
@@ -111,18 +142,29 @@ export function createTreasuryResourceClient(
   if (!config.treasuryMnemonic) {
     throw new Error('TREASURY_MNEMONIC is required to pay downstream x402 resources.');
   }
-  const payingClient = createAvmPayingClient(config.treasuryMnemonic, config.networkName, fetchImpl);
-  const payer: PaidFetchClient = {
-    address: payingClient.signer.address,
-    fetchWithPayment: payingClient.fetchWithPayment,
-    readSettlement: response =>
-      payingClient.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
+
+  // Resolve and expose the treasury address once; each resource call receives its own x402 client
+  // so its pre-sign payment policy is immutable and safe under concurrent jobs.
+  const identity = createAvmPayingClient(config.treasuryMnemonic, config.networkName, fetchImpl);
+  const address = identity.signer.address;
+
+  const client: ResourceClient = {
+    async execute(request, definition, jobId) {
+      const payingClient = createAvmPayingClient(config.treasuryMnemonic!, config.networkName, fetchImpl, {
+        paymentPolicies: [createDownstreamPaymentPolicy(config, definition)],
+      });
+      const payer: PaidFetchClient = {
+        address: payingClient.signer.address,
+        fetchWithPayment: payingClient.fetchWithPayment,
+        readSettlement: response =>
+          payingClient.httpClient.getPaymentSettleResponse(name => response.headers.get(name)),
+      };
+      return createPaidResourceClient(payer, {
+        timeoutMs: config.shield.requestTimeoutMs,
+        maxResponseBytes: config.shield.maxResponseBytes,
+      }).execute(request, definition, jobId);
+    },
   };
-  return {
-    address: payer.address,
-    client: createPaidResourceClient(payer, {
-      timeoutMs: config.shield.requestTimeoutMs,
-      maxResponseBytes: config.shield.maxResponseBytes,
-    }),
-  };
+
+  return { address, client };
 }
