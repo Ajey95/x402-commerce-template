@@ -53,4 +53,16 @@ describe('downstream pre-sign payment policy', () => {
     expect(policy(2, [requirement({ payTo: externalPayTo })])).toHaveLength(1);
     expect(policy(2, [requirement({ payTo })])).toEqual([]);
   });
+
+  it('fails closed if an external definition reaches policy construction without a recipient pin', () => {
+    const externalWithoutPayTo = {
+      ...weather,
+      id: 'external-weather',
+      origin: 'https://provider.example',
+      trust: 'external-curated' as const,
+      payTo: undefined,
+    };
+    const policy = createDownstreamPaymentPolicy(config, externalWithoutPayTo);
+    expect(policy(2, [requirement()])).toEqual([]);
+  });
 });
